@@ -92,7 +92,26 @@ const C={
 const CYAN_GRAD=`linear-gradient(135deg,#00CFFF,#0099CC)`;
 const sCard='0 4px 24px rgba(0,0,0,0.5)';
 const sCyan='0 4px 20px rgba(0,207,255,0.28)';
-const pic=(w,h,s)=>`https://picsum.photos/${w}/${h}?random=${s}`;
+// Real location photos (Unsplash) keyed by the photo/seed id used in mock data.
+// Anything not listed (avatars, people) falls back to a random picsum image.
+const REAL_PHOTOS={
+  10:'1597949418224-d2730485d9ec',  11:'1597949418224-d2730485d9ec', // Half Dome, Yosemite
+  20:'1595131264251-63b7cf3b8564',                                    // Grand Teton
+  22:'1520475178495-a8d5b36f1782',                                    // Lost Coast, King Range
+  30:'1618141638308-e2d6ce729716',                                    // Angels Landing, Zion
+  33:'1782513287459-b71c0854527c',                                    // The Enchantments
+  40:'1600542158543-1faed2d1c05d',                                    // Sky Pond, RMNP
+  44:'1561267636-2afe65388a36',                                       // Mt. Tallac, Lake Tahoe
+  50:'1657740450378-4123dbe4ac0c',                                    // Hurricane Ridge, Olympic
+  101:'1709339897702-20dbe9758eea',                                   // Havasupai Falls
+  102:'1729538660620-1691d1a6b434',                                   // The Wave, Coyote Buttes
+  103:'1477573829233-74cd1c17fa65',                                   // Laugavegur Trail, Iceland
+  104:'1708394534994-4e66c2b09e1f',                                   // Fitz Roy, Patagonia
+  105:'1756993263326-d1e7c071c485',                                   // Wonderland Trail, Mt. Rainier
+};
+const pic=(w,h,s)=>REAL_PHOTOS[s]
+  ?`https://images.unsplash.com/photo-${REAL_PHOTOS[s]}?w=${w*2}&h=${h*2}&fit=crop&crop=entropy&q=70&auto=format`
+  :`https://picsum.photos/${w}/${h}?random=${s}`;
 // Typography
 const FONT_H="'Manrope','SF Pro Display',-apple-system,sans-serif";
 const FONT_B="'SF Pro Text',-apple-system,BlinkMacSystemFont,sans-serif";
@@ -191,7 +210,32 @@ const MY_ADVENTURES=[
   {id:1,title:'Half Dome Summit',photo:11,avatar:99,dist:'4.2mi',elev:'2,693ft',dur:'8h 32m'},
   {id:2,title:'Enchantments Traverse',photo:33,avatar:99,dist:'18.6mi',elev:'4,400ft',dur:'11h'},
   {id:3,title:'Lost Coast Backpack',photo:22,avatar:99,dist:'24.1mi',elev:'3,100ft',dur:'3 days'},
-  {id:4,title:'Angels Landing',photo:44,avatar:99,dist:'8.3mi',elev:'1,488ft',dur:'5h 20m'},
+  {id:4,title:'Angels Landing',photo:30,avatar:99,dist:'8.3mi',elev:'1,488ft',dur:'5h 20m'},
+];
+
+// ── Achievements (gamification) ────────────────────────────────────────────
+// Player level summary shown at the top of the Profile achievements section.
+const PLAYER={level:12,rank:'Trail Veteran',xp:8450,xpNext:10000};
+
+// tier → medal colors. 'locked' renders greyed-out.
+const TIERS={
+  bronze:  {ring:'#C77B3B',glow:'rgba(199,123,59,0.45)', chip:'Bronze'},
+  silver:  {ring:'#B8C2CC',glow:'rgba(184,194,204,0.40)',chip:'Silver'},
+  gold:    {ring:'#E8B923',glow:'rgba(232,185,35,0.45)', chip:'Gold'},
+  platinum:{ring:'#6FE3FF',glow:'rgba(111,227,255,0.50)',chip:'Platinum'},
+  locked:  {ring:'#3A3A48',glow:'transparent',           chip:'Locked'},
+};
+
+// current/target drive the progress bar; tier 'locked' = not yet unlocked.
+const ACHIEVEMENTS=[
+  {id:1,icon:'🥾',title:'Trailblazer',  desc:'Adventures logged',     tier:'gold',    current:47,  target:50,   unit:''},
+  {id:2,icon:'🧭',title:'Century Club', desc:'Total distance hiked',  tier:'silver',  current:312, target:500,  unit:'mi'},
+  {id:3,icon:'⛰️',title:'Cloud Chaser', desc:'Vertical feet climbed', tier:'platinum',current:104000,target:100000,unit:'ft'},
+  {id:4,icon:'🏔️',title:'Peak Bagger',  desc:'Named summits reached', tier:'bronze',  current:9,   target:25,   unit:''},
+  {id:5,icon:'🌅',title:'Early Riser',  desc:'Sunrise summits',       tier:'silver',  current:6,   target:10,   unit:''},
+  {id:6,icon:'🌍',title:'Globetrotter', desc:'Countries explored',    tier:'locked',  current:1,   target:5,    unit:''},
+  {id:7,icon:'🔥',title:'On a Streak',  desc:'Weeks in a row',        tier:'gold',    current:11,  target:12,   unit:'wk'},
+  {id:8,icon:'🌙',title:'Night Owl',    desc:'Overnight backpacks',   tier:'locked',  current:3,   target:10,   unit:''},
 ];
 
 // ── Micro-components ───────────────────────────────────────────────────────
@@ -1441,14 +1485,118 @@ function PlanScreen(){
   return h(PlanListView,{onNew:openNew,onOpen:openDetail});
 }
 
+// ── Profile: Achievements (replaces the adventure deck) ────────────────────
+const fmt=n=>n.toLocaleString('en-US');
+
+function AchievementBadge({a}){
+  const t=TIERS[a.tier];
+  const locked=a.tier==='locked';
+  const done=a.current>=a.target;
+  const pct=Math.min(100,Math.round(a.current/a.target*100));
+  return h('div',{style:{
+    borderRadius:18,padding:'15px 14px 14px',
+    background:'rgba(28,28,40,0.92)',
+    border:`1px solid ${locked?'rgba(255,255,255,0.05)':'rgba(255,255,255,0.08)'}`,
+    boxShadow:'0 4px 20px rgba(0,0,0,0.40)',
+    opacity:locked?0.62:1,
+  }},
+    /* Medal + tier chip */
+    h('div',{style:{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:11}},
+      h('div',{style:{
+        width:52,height:52,borderRadius:'50%',
+        display:'flex',alignItems:'center',justifyContent:'center',
+        fontSize:24,position:'relative',
+        background:locked?'rgba(255,255,255,0.04)':'radial-gradient(circle at 50% 35%,rgba(255,255,255,0.10),rgba(0,0,0,0.25))',
+        border:`2px solid ${t.ring}`,
+        boxShadow:locked?'none':`0 0 14px ${t.glow},inset 0 0 8px rgba(0,0,0,0.4)`,
+        filter:locked?'grayscale(1)':'none',
+      }},
+        a.icon,
+        done&&!locked&&h('div',{style:{
+          position:'absolute',bottom:-3,right:-3,
+          width:20,height:20,borderRadius:'50%',background:t.ring,
+          display:'flex',alignItems:'center',justifyContent:'center',
+          border:'2px solid #14141F',
+        }},h(Check,{size:11,color:'#14141F',strokeWidth:3.5}))
+      ),
+      h('span',{style:{
+        fontSize:9,fontWeight:800,fontFamily:FONT_H,letterSpacing:'0.5px',
+        textTransform:'uppercase',color:locked?C.textMuted:t.ring,
+        border:`1px solid ${locked?'rgba(255,255,255,0.12)':t.ring}`,
+        borderRadius:7,padding:'3px 7px',marginTop:3,
+      }},t.chip)
+    ),
+    /* Title + desc */
+    h('p',{style:{fontSize:14.5,fontWeight:800,color:C.white,fontFamily:FONT_H,letterSpacing:'-0.2px',marginBottom:2}},a.title),
+    h('p',{style:{fontSize:11,color:C.textMuted,fontFamily:FONT_B,marginBottom:11}},a.desc),
+    /* Progress bar */
+    h('div',{style:{height:6,borderRadius:3,background:'rgba(255,255,255,0.08)',overflow:'hidden',marginBottom:6}},
+      h('div',{style:{
+        height:'100%',width:pct+'%',borderRadius:3,
+        background:locked?'rgba(255,255,255,0.22)':`linear-gradient(90deg,${t.ring},${t.ring})`,
+        boxShadow:locked?'none':`0 0 8px ${t.glow}`,
+      }})
+    ),
+    /* Progress text */
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline'}},
+      h('span',{style:{fontSize:11,fontWeight:700,color:done&&!locked?t.ring:'rgba(255,255,255,0.82)',fontFamily:FONT_B}},
+        done&&!locked?'Unlocked':`${fmt(a.current)} / ${fmt(a.target)}${a.unit?' '+a.unit:''}`),
+      h('span',{style:{fontSize:10,color:C.textMuted,fontFamily:FONT_B}},pct+'%')
+    )
+  );
+}
+
+function ProfileAchievements(){
+  const unlocked=ACHIEVEMENTS.filter(a=>a.tier!=='locked'&&a.current>=a.target).length;
+  const xpPct=Math.round(PLAYER.xp/PLAYER.xpNext*100);
+  return h('div',{},
+    /* ── Level banner ── */
+    h('div',{style:{margin:'0 20px 22px'}},
+      h('div',{style:{
+        borderRadius:20,padding:'16px 18px',position:'relative',overflow:'hidden',
+        background:'linear-gradient(135deg,rgba(0,207,255,0.16),rgba(0,140,200,0.06))',
+        border:'1px solid rgba(0,207,255,0.22)',
+        boxShadow:'0 4px 24px rgba(0,0,0,0.4)',
+      }},
+        h('div',{style:{display:'flex',alignItems:'center',gap:14,marginBottom:14}},
+          h('div',{style:{
+            width:54,height:54,borderRadius:16,flexShrink:0,
+            display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+            background:'linear-gradient(135deg,#00D8FF,#00A6D6)',
+            boxShadow:'0 4px 16px rgba(0,207,255,0.45)',
+          }},
+            h('span',{style:{fontSize:8,fontWeight:800,color:'#061018',fontFamily:FONT_H,letterSpacing:'0.5px',marginBottom:-2}},'LVL'),
+            h('span',{style:{fontSize:22,fontWeight:900,color:'#061018',fontFamily:FONT_H,lineHeight:1}},PLAYER.level)
+          ),
+          h('div',{style:{flex:1}},
+            h('p',{style:{fontSize:17,fontWeight:900,color:C.white,fontFamily:FONT_H,letterSpacing:'-0.3px'}},PLAYER.rank),
+            h('p',{style:{fontSize:12,color:'rgba(255,255,255,0.7)',fontFamily:FONT_B,marginTop:2}},`${unlocked} of ${ACHIEVEMENTS.length} badges earned`)
+          ),
+          h('div',{style:{textAlign:'right'}},
+            h('p',{style:{fontSize:16,fontWeight:900,color:C.cyan,fontFamily:FONT_H,lineHeight:1}},fmt(PLAYER.xp)),
+            h('p',{style:{fontSize:10,color:C.textMuted,fontFamily:FONT_B,marginTop:2}},'XP')
+          )
+        ),
+        /* XP bar */
+        h('div',{style:{height:8,borderRadius:4,background:'rgba(0,0,0,0.30)',overflow:'hidden'}},
+          h('div',{style:{height:'100%',width:xpPct+'%',borderRadius:4,
+            background:'linear-gradient(90deg,#00D8FF,#7FE7FF)',boxShadow:'0 0 10px rgba(0,207,255,0.6)'}})
+        ),
+        h('p',{style:{fontSize:10.5,color:'rgba(255,255,255,0.6)',fontFamily:FONT_B,marginTop:7,textAlign:'right'}},
+          `${fmt(PLAYER.xpNext-PLAYER.xp)} XP to Level ${PLAYER.level+1}`)
+      )
+    ),
+    /* ── Badge grid ── */
+    h('div',{style:{
+      display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,padding:'0 16px',
+    }},
+      ...ACHIEVEMENTS.map(a=>h(AchievementBadge,{key:a.id,a}))
+    )
+  );
+}
+
 // ── Profile Screen ─────────────────────────────────────────────────────────
 function ProfileScreen({onPremium,onOpenCreate}){
-  const posts=MY_ADVENTURES;
-  const N=posts.length;
-  const CARD_H=222;
-  const PEEK_H=56;
-  const stackH=CARD_H+PEEK_H*(N-1);
-
   return h('div',{style:{position:'absolute',inset:0,background:C.bg}},
 
     /* ── Teal radial glow (same language as Friends/Create pages) ── */
@@ -1516,90 +1664,12 @@ function ProfileScreen({onPremium,onOpenCreate}){
 
       /* Section heading */
       h('div',{style:{padding:'0 20px 14px',display:'flex',alignItems:'center',justifyContent:'space-between'}},
-        h('h3',{style:{fontSize:15,fontWeight:800,color:C.white,fontFamily:FONT_H,letterSpacing:'-0.2px'}},'My Adventures'),
+        h('h3',{style:{fontSize:15,fontWeight:800,color:C.white,fontFamily:FONT_H,letterSpacing:'-0.2px'}},'Achievements'),
         h('span',{style:{fontSize:12,color:C.cyan,fontWeight:600,fontFamily:FONT_B}},'See all')
       ),
 
-      /* ── Stacked deck ── */
-      h('div',{style:{position:'relative',height:stackH,margin:'0 16px'}},
-        /* Render back-to-front so highest revIdx (front card) is last in DOM → naturally on top */
-        ...[...posts].reverse().map((post,revIdx)=>{
-          const isFront   = revIdx === N-1;
-          const fromFront = N-1-revIdx;          // 0 = front, N-1 = back
-          const scaleVal  = 1 - fromFront*0.045; // 0.865, 0.91, 0.955, 1.0
-          const topVal    = revIdx * PEEK_H;
-          const zIdx      = revIdx + 1;
-          // Darker overlay on cards further back for perceived depth
-          const overlayAlpha = 0.65 - revIdx * 0.18; // 0.65 → 0.47 → 0.29 → 0.11
-
-          return h('div',{
-            key:post.id,
-            style:{
-              position:'absolute',
-              top:topVal,left:0,right:0,
-              height:CARD_H,
-              borderRadius:22,
-              overflow:'hidden',
-              zIndex:zIdx,
-              transform:`scale(${scaleVal})`,
-              transformOrigin:'center top',
-              cursor:'pointer',
-              boxShadow:isFront
-                ?'0 14px 48px rgba(0,0,0,0.70),0 4px 16px rgba(0,0,0,0.4)'
-                :'0 4px 18px rgba(0,0,0,0.45)',
-              transition:'transform 0.22s ease,box-shadow 0.22s ease',
-            }
-          },
-            /* Photo */
-            h('img',{src:pic(380,CARD_H,post.photo),alt:post.title,style:{
-              width:'100%',height:'100%',objectFit:'cover',display:'block',
-            }}),
-            /* Depth overlay — darker for cards further back */
-            h('div',{style:{
-              position:'absolute',inset:0,
-              background:`rgba(0,0,0,${overlayAlpha})`,
-            }}),
-            /* Bottom gradient on front card for text legibility */
-            isFront&&h('div',{style:{
-              position:'absolute',inset:0,
-              background:'linear-gradient(to bottom,transparent 30%,rgba(0,0,0,0.78) 100%)',
-            }}),
-            /* Small avatar top-left */
-            h('img',{src:pic(34,34,post.avatar),alt:'',style:{
-              position:'absolute',top:12,left:12,
-              width:34,height:34,borderRadius:'50%',objectFit:'cover',
-              border:'2px solid rgba(255,255,255,0.65)',
-              boxShadow:'0 2px 8px rgba(0,0,0,0.5)',
-            }}),
-            /* Title overlay */
-            h('div',{style:{
-              position:'absolute',
-              bottom:isFront?16:10,
-              left:14,right:14,
-            }},
-              h('p',{style:{
-                fontSize:isFront?17:14,
-                fontWeight:700,
-                color:C.white,
-                fontFamily:FONT_H,
-                lineHeight:1.2,
-                letterSpacing:'-0.2px',
-                textShadow:'0 1px 6px rgba(0,0,0,0.6)',
-              }},post.title),
-              /* Stats row on the front card only */
-              isFront&&h('div',{style:{
-                display:'flex',alignItems:'center',gap:10,marginTop:5,
-              }},
-                h('span',{style:{fontSize:11,color:'rgba(255,255,255,0.78)',fontFamily:FONT_B}},`🥾 ${post.dist}`),
-                h('span',{style:{color:'rgba(255,255,255,0.32)',fontSize:11}},'·'),
-                h('span',{style:{fontSize:11,color:'rgba(255,255,255,0.78)',fontFamily:FONT_B}},post.elev),
-                h('span',{style:{color:'rgba(255,255,255,0.32)',fontSize:11}},'·'),
-                h('span',{style:{fontSize:11,color:'rgba(255,255,255,0.78)',fontFamily:FONT_B}},post.dur)
-              )
-            )
-          );
-        })
-      )
+      /* ── Achievements (level banner + badge grid) ── */
+      h(ProfileAchievements,{})
     ),
 
     /* ── "Add Adventure" button — floating above bottom nav ── */
@@ -1906,6 +1976,90 @@ function HomeFriendsCards({likedPosts,onLike}){
   );
 }
 
+// Section header — title + optional cyan action
+function SectionHeader({title,action}){
+  return h('div',{style:{
+    display:'flex',alignItems:'baseline',justifyContent:'space-between',
+    padding:'0 20px 12px',
+  }},
+    h('h3',{style:{fontSize:18,fontWeight:800,color:C.white,fontFamily:FONT_H,letterSpacing:'-0.3px'}},title),
+    action&&h('span',{style:{fontSize:12,color:C.cyan,fontWeight:600,fontFamily:FONT_B}},action)
+  );
+}
+
+// Explore — horizontal row of bucket-list destinations (from WISHLIST)
+function HomeExploreCards(){
+  return h('div',{style:{
+    display:'flex',gap:12,
+    paddingLeft:20,paddingRight:8,paddingBottom:4,
+    overflowX:'auto',scrollbarWidth:'none',
+  }},
+    ...WISHLIST.map(item=>h('div',{key:item.id,style:{
+      width:172,flexShrink:0,borderRadius:20,overflow:'hidden',position:'relative',
+      height:230,boxShadow:'0 4px 24px rgba(0,0,0,0.5)',
+      border:`1px solid rgba(255,255,255,0.07)`,
+    }},
+      h('img',{src:pic(172,230,item.seed),alt:item.title,style:{
+        width:'100%',height:'100%',objectFit:'cover',display:'block'}}),
+      h('div',{style:{position:'absolute',inset:0,
+        background:'linear-gradient(to bottom,transparent 30%,rgba(0,0,0,0.78) 100%)'}}),
+      h('div',{style:{position:'absolute',top:10,right:10,...glassStyle,borderRadius:'50%',
+        width:30,height:30,display:'flex',alignItems:'center',justifyContent:'center'}},
+        h(Bookmark,{size:14,color:C.cyan,strokeWidth:2,fill:C.cyan})
+      ),
+      h('div',{style:{position:'absolute',left:0,right:0,bottom:0,padding:'12px 13px 14px'}},
+        h('p',{style:{fontSize:15,fontWeight:800,color:C.white,fontFamily:FONT_H,
+          letterSpacing:'-0.2px',lineHeight:1.15,marginBottom:3}},item.title),
+        h('div',{style:{display:'flex',alignItems:'center',gap:4,marginBottom:8}},
+          h(MapPin,{size:11,color:C.cyan,strokeWidth:2}),
+          h('span',{style:{fontSize:11,color:'rgba(255,255,255,0.78)',fontFamily:FONT_B}},item.subtitle)
+        ),
+        h('span',{style:{display:'inline-block',...glassStyle,borderRadius:8,padding:'3px 8px',
+          fontSize:9.5,fontWeight:700,color:C.white,fontFamily:FONT_B,letterSpacing:'0.2px'}},item.tags[0])
+      )
+    ))
+  );
+}
+
+// Trail of the Week — large editorial hero card
+function HomeTrailOfWeek(){
+  const feat={title:'Fitz Roy Trek',subtitle:'Patagonia, Argentina',seed:104,
+    blurb:'A granite cathedral at the end of the world. Best at first light.',
+    dist:'15.5mi',elev:'2,790ft',dur:'Full day'};
+  return h('div',{style:{padding:'0 20px'}},
+    h('div',{style:{
+      borderRadius:24,overflow:'hidden',position:'relative',height:248,
+      boxShadow:'0 8px 32px rgba(0,0,0,0.55)',border:`1px solid rgba(255,255,255,0.08)`,
+    }},
+      h('img',{src:pic(350,248,feat.seed),alt:feat.title,style:{
+        width:'100%',height:'100%',objectFit:'cover',display:'block'}}),
+      h('div',{style:{position:'absolute',inset:0,
+        background:'linear-gradient(to bottom,rgba(0,0,0,0.28) 0%,transparent 35%,rgba(0,0,0,0.85) 100%)'}}),
+      h('div',{style:{position:'absolute',top:14,left:14,...glassStyle,borderRadius:20,
+        padding:'5px 12px',display:'flex',alignItems:'center',gap:5}},
+        h(Crown,{size:12,color:C.cyan,strokeWidth:2.2}),
+        h('span',{style:{fontSize:10.5,fontWeight:800,color:C.white,fontFamily:FONT_H,
+          letterSpacing:'0.4px',textTransform:'uppercase'}},'Trail of the Week')
+      ),
+      h('div',{style:{position:'absolute',left:0,right:0,bottom:0,padding:'18px 18px 18px'}},
+        h('p',{style:{fontSize:23,fontWeight:900,color:C.white,fontFamily:FONT_H,
+          letterSpacing:'-0.5px',lineHeight:1.05,marginBottom:4}},feat.title),
+        h('div',{style:{display:'flex',alignItems:'center',gap:4,marginBottom:8}},
+          h(MapPin,{size:12,color:C.cyan,strokeWidth:2}),
+          h('span',{style:{fontSize:12,color:'rgba(255,255,255,0.82)',fontFamily:FONT_B}},feat.subtitle)
+        ),
+        h('p',{style:{fontSize:12.5,color:'rgba(255,255,255,0.74)',fontFamily:FONT_B,
+          lineHeight:1.4,marginBottom:12,maxWidth:280}},feat.blurb),
+        h('div',{style:{display:'flex',alignItems:'center',gap:8}},
+          ...[['🥾',feat.dist],['📈',feat.elev],['⏱',feat.dur]].map(([ic,val],i)=>
+            h('span',{key:i,style:{...glassStyle,borderRadius:10,padding:'5px 10px',
+              fontSize:11,fontWeight:700,color:C.white,fontFamily:FONT_B}},ic+' '+val))
+        )
+      )
+    )
+  );
+}
+
 function HomeScreen({likedPosts,onLike}){
   const [activeTab,setActiveTab]=S('recent');
 
@@ -1997,6 +2151,15 @@ function HomeScreen({likedPosts,onLike}){
       activeTab==='recent'   &&h(HomeRecentCards,{}),
       activeTab==='upcoming' &&h(HomeUpcomingCards,{}),
       activeTab==='friends'  &&h(HomeFriendsCards,{likedPosts,onLike}),
+
+      /* ── EXPLORE ─────────────────────────────────────────────────── */
+      h('div',{style:{height:28}}),
+      h(SectionHeader,{title:'Explore',action:'See all'}),
+      h(HomeExploreCards,{}),
+
+      /* ── TRAIL OF THE WEEK ───────────────────────────────────────── */
+      h('div',{style:{height:28}}),
+      h(HomeTrailOfWeek,{}),
     )
   );
 }

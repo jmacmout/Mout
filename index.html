@@ -23,14 +23,14 @@ button{border:none;background:none;cursor:pointer;font-family:inherit}
 input,textarea{border:none;outline:none;background:none;font-family:inherit;resize:none;width:100%;color:#fff}
 input::placeholder,textarea::placeholder{color:rgba(255,255,255,0.32)}
 ::-webkit-scrollbar{width:0;height:0}
-/* MapLibre overrides for dark theme */
+/* MapLibre overrides for light theme */
 .maplibregl-ctrl-attrib{
   font-size:9px!important;
-  background:rgba(14,14,24,0.75)!important;
-  color:rgba(255,255,255,0.45)!important;
+  background:rgba(255,255,255,0.70)!important;
+  color:rgba(15,25,35,0.55)!important;
   border-radius:6px!important;
 }
-.maplibregl-ctrl-attrib a{color:rgba(255,255,255,0.45)!important}
+.maplibregl-ctrl-attrib a{color:rgba(15,25,35,0.55)!important}
 .maplibregl-ctrl-bottom-right{bottom:92px!important;right:56px!important}
 </style>
 </head>
@@ -58,47 +58,47 @@ import{
 const h=React.createElement;
 const {useState:S,useCallback:CB,useMemo:M,useEffect:E,useRef:R}=React;
 
-// ── Dark Design System ─────────────────────────────────────────────────────
+// ── Light Design System (blue-grey + steel blue) ───────────────────────────
 const C={
-  // Backgrounds
-  bg:'#14141F',
-  bgCard:'#1C1C28',
-  bgElevated:'#252532',
-  bgOverlay:'rgba(14,14,24,0.88)',
+  // Backgrounds — transparent so app-level gradient shows through
+  bg:'transparent',
+  bgCard:'rgba(255,255,255,0.65)',
+  bgElevated:'rgba(255,255,255,0.82)',
+  bgOverlay:'rgba(216,228,236,0.90)',
 
-  // Cyan accent
-  cyan:'#00CFFF',
-  cyanDark:'#0099CC',
-  cyanGlow:'rgba(0,207,255,0.22)',
+  // Steel blue accent (replaces teal)
+  cyan:'#2D5F8C',
+  cyanDark:'#1E4F7A',
+  cyanGlow:'rgba(45,95,140,0.18)',
 
-  // Text
+  // Text — dark on light background
   white:'#FFFFFF',
-  textPrimary:'#FFFFFF',
-  textSecondary:'rgba(255,255,255,0.55)',
-  textMuted:'rgba(255,255,255,0.32)',
+  textPrimary:'#0F1923',
+  textSecondary:'rgba(15,25,35,0.60)',
+  textMuted:'rgba(15,25,35,0.42)',
 
-  // Borders
-  border:'rgba(255,255,255,0.07)',
-  borderLight:'rgba(255,255,255,0.12)',
+  // Borders — subtle dark on light
+  border:'rgba(15,25,35,0.08)',
+  borderLight:'rgba(15,25,35,0.14)',
 
   // Semantic
-  gold:'#F0A500',
-  danger:'#FF5C5C',
+  gold:'#C8860A',
+  danger:'#D94040',
 
   // Map trail (keep natural green)
   trail:'#4A7C59',
 };
 
-const CYAN_GRAD=`linear-gradient(135deg,#00CFFF,#0099CC)`;
-const sCard='0 4px 24px rgba(0,0,0,0.5)';
-const sCyan='0 4px 20px rgba(0,207,255,0.28)';
+const CYAN_GRAD=`linear-gradient(135deg,#2D5F8C,#1E4F7A)`;
+const sCard='0 4px 20px rgba(15,25,35,0.10)';
+const sCyan='0 6px 22px rgba(45,95,140,0.28)';
 const pic=(w,h,s)=>`https://picsum.photos/${w}/${h}?random=${s}`;
 // Typography
 const FONT_H="'Manrope','SF Pro Display',-apple-system,sans-serif";
 const FONT_B="'SF Pro Text',-apple-system,BlinkMacSystemFont,sans-serif";
 // Frosted glass style helper
-const GLASS='rgba(14,14,24,0.65)';
-const glassStyle={background:GLASS,backdropFilter:'blur(18px) saturate(180%)',WebkitBackdropFilter:'blur(18px) saturate(180%)',border:`1px solid rgba(255,255,255,0.10)`};
+const GLASS='rgba(255,255,255,0.55)';
+const glassStyle={background:GLASS,backdropFilter:'blur(20px) saturate(200%)',WebkitBackdropFilter:'blur(20px) saturate(200%)',border:`1px solid rgba(255,255,255,0.82)`};
 // Map type options (2D Map is free, others are premium)
 const MAP_OPTIONS=[
   {label:'2D Map',value:'visited',premium:false},
@@ -199,20 +199,20 @@ function StatusBar(){
   return h('div',{style:{position:'absolute',top:0,left:0,right:0,height:54,
     display:'flex',alignItems:'center',justifyContent:'space-between',
     padding:'14px 24px 0',zIndex:50,pointerEvents:'none'}},
-    h('span',{style:{fontWeight:600,fontSize:15,color:C.white}},'9:41'),
+    h('span',{style:{fontWeight:600,fontSize:15,color:C.textPrimary}},'9:41'),
     h('div',{style:{display:'flex',alignItems:'center',gap:5}},
       [4,3,2].map(bh=>h('div',{key:bh,style:{width:3,height:bh*3,borderRadius:1,
-        background:C.white,opacity:0.9}})),
-      h('div',{style:{width:16,height:11,borderRadius:2,border:`1.5px solid ${C.white}`,
+        background:C.textPrimary,opacity:0.8}})),
+      h('div',{style:{width:16,height:11,borderRadius:2,border:`1.5px solid ${C.textPrimary}`,
         marginLeft:4,position:'relative',display:'flex',alignItems:'center',padding:'0 2px'}},
-        h('div',{style:{flex:1,height:6,background:C.white,borderRadius:1}}))
+        h('div',{style:{flex:1,height:6,background:C.textPrimary,borderRadius:1}}))
     )
   );
 }
 
 function LocationPill({name}){
   return h('div',{style:{display:'inline-flex',alignItems:'center',gap:4,
-    background:'rgba(14,14,24,0.75)',backdropFilter:'blur(8px)',
+    ...glassStyle,
     borderRadius:10,padding:'4px 10px'}},
     h(MapPin,{size:12,color:C.cyan,strokeWidth:2.5}),
     h('span',{style:{fontSize:11,fontWeight:600,color:C.white}},name)
@@ -988,7 +988,7 @@ function PlanListView({onNew,onOpen}){
   return h('div',{style:{position:'absolute',inset:0,background:C.bg}},
     h('div',{style:{
       position:'absolute',top:0,left:0,right:0,height:300,
-      background:'radial-gradient(ellipse 100% 55% at 50% 0%,rgba(0,180,220,0.18) 0%,transparent 70%)',
+      background:'radial-gradient(ellipse 100% 55% at 50% 0%,rgba(255,255,255,0.30) 0%,transparent 70%)',
       pointerEvents:'none',zIndex:0,
     }}),
     h(StatusBar,{}),
@@ -1021,10 +1021,10 @@ function PlanListView({onNew,onOpen}){
         h('div',{key:adv.id,onClick:()=>onOpen(adv.id),
           style:{
             margin:'0 16px 16px',borderRadius:22,cursor:'pointer',
-            background:'rgba(28,28,40,0.92)',
-            border:`1px solid rgba(255,255,255,0.07)`,
+            background:'rgba(255,255,255,0.65)',
+            border:`1px solid rgba(255,255,255,0.80)`,
             overflow:'hidden',
-            boxShadow:'0 4px 24px rgba(0,0,0,0.5)',
+            boxShadow:sCard,
           }
         },
           // Photo strip
@@ -1198,7 +1198,7 @@ function PlanNewView({onBack}){
           ...[{k:'friends',label:'Friends Only'},{k:'public',label:'Public to All'}].map(opt=>
             h('button',{key:opt.k,onClick:()=>setVis(opt.k),style:{
               flex:1,borderRadius:22,padding:'12px 0',
-              background:vis===opt.k?'rgba(0,207,255,0.14)':'rgba(28,28,40,0.9)',
+              background:vis===opt.k?'rgba(45,95,140,0.14)':'rgba(255,255,255,0.58)',
               border:`1.5px solid ${vis===opt.k?C.cyan:'rgba(255,255,255,0.08)'}`,
               fontSize:14,fontWeight:600,fontFamily:FONT_B,
               color:vis===opt.k?C.cyan:C.textMuted,
@@ -1242,7 +1242,7 @@ function PlanDetailView({adventure:adv,onBack}){
   }},
     h('div',{style:{
       position:'absolute',top:0,left:0,right:0,height:280,
-      background:'radial-gradient(ellipse 100% 55% at 50% 0%,rgba(0,180,220,0.18) 0%,transparent 70%)',
+      background:'radial-gradient(ellipse 100% 55% at 50% 0%,rgba(255,255,255,0.30) 0%,transparent 70%)',
       pointerEvents:'none',zIndex:0,
     }}),
     h(StatusBar,{}),
@@ -1395,13 +1395,13 @@ function PlanDetailView({adventure:adv,onBack}){
     h('div',{style:{
       flexShrink:0,
       padding:'12px 16px 84px',
-      background:'linear-gradient(to top,rgba(14,14,24,1) 54%,rgba(14,14,24,0) 100%)',
+      background:'linear-gradient(to top,rgba(200,218,228,0.98) 54%,rgba(200,218,228,0) 100%)',
       position:'relative',zIndex:10,
     }},
       h('div',{style:{display:'flex',gap:10}},
         h('button',{onClick:()=>setRsvp('going'),style:{
           flex:1,borderRadius:22,padding:'13px 0',
-          background:rsvp==='going'?'linear-gradient(135deg,#00D8FF,#00BFEF)':'rgba(28,28,40,0.9)',
+          background:rsvp==='going'?CYAN_GRAD:'rgba(255,255,255,0.60)',
           border:`1.5px solid ${rsvp==='going'?'transparent':'rgba(255,255,255,0.10)'}`,
           fontSize:14,fontWeight:700,color:rsvp==='going'?'#061018':C.textMuted,fontFamily:FONT_H,
           boxShadow:rsvp==='going'?'0 4px 16px rgba(0,207,255,0.35)':'none',
@@ -1409,14 +1409,14 @@ function PlanDetailView({adventure:adv,onBack}){
         }},'Going'),
         h('button',{onClick:()=>setRsvp('maybe'),style:{
           flex:1,borderRadius:22,padding:'13px 0',
-          background:rsvp==='maybe'?'rgba(0,207,255,0.12)':'rgba(28,28,40,0.9)',
+          background:rsvp==='maybe'?'rgba(45,95,140,0.14)':'rgba(255,255,255,0.60)',
           border:`1.5px solid ${rsvp==='maybe'?C.cyan:'rgba(255,255,255,0.10)'}`,
           fontSize:14,fontWeight:700,color:rsvp==='maybe'?C.cyan:C.textMuted,fontFamily:FONT_H,
           transition:'all 0.18s ease',
         }},'Maybe'),
         h('button',{onClick:()=>setRsvp('cant'),style:{
           flex:1,borderRadius:22,padding:'13px 0',
-          background:rsvp==='cant'?'rgba(255,92,92,0.10)':'rgba(28,28,40,0.9)',
+          background:rsvp==='cant'?'rgba(217,64,64,0.10)':'rgba(255,255,255,0.60)',
           border:`1.5px solid ${rsvp==='cant'?C.danger:'rgba(255,255,255,0.10)'}`,
           fontSize:14,fontWeight:700,color:rsvp==='cant'?C.danger:C.textMuted,fontFamily:FONT_H,
           transition:'all 0.18s ease',
@@ -1503,7 +1503,7 @@ function ProfileScreen({onPremium,onOpenCreate}){
     /* ── Teal radial glow (same language as Friends/Create pages) ── */
     h('div',{style:{
       position:'absolute',top:0,left:0,right:0,height:360,
-      background:'radial-gradient(ellipse 100% 65% at 50% 0%,rgba(0,180,220,0.20) 0%,transparent 70%)',
+      background:'radial-gradient(ellipse 100% 65% at 50% 0%,rgba(255,255,255,0.30) 0%,transparent 70%)',
       pointerEvents:'none',zIndex:0,
     }}),
 
@@ -1782,8 +1782,8 @@ function HomeRecentCards(){
   }},
     ...MY_ADVENTURES.map(post=>h('div',{key:post.id,style:{
       width:252,flexShrink:0,borderRadius:20,overflow:'hidden',
-      background:'rgba(28,28,40,0.92)',border:`1px solid rgba(255,255,255,0.07)`,
-      boxShadow:'0 4px 24px rgba(0,0,0,0.5)',
+      background:'rgba(255,255,255,0.65)',border:`1px solid rgba(255,255,255,0.80)`,
+      boxShadow:sCard,
     }},
       h('div',{style:{position:'relative',height:152,overflow:'hidden'}},
         h('img',{src:pic(252,152,post.photo),alt:post.title,style:{
@@ -1814,8 +1814,8 @@ function HomeUpcomingCards(){
   }},
     ...PLAN_ADVENTURES.map(adv=>h('div',{key:adv.id,style:{
       width:252,flexShrink:0,borderRadius:20,overflow:'hidden',
-      background:'rgba(28,28,40,0.92)',border:`1px solid rgba(255,255,255,0.07)`,
-      boxShadow:'0 4px 24px rgba(0,0,0,0.5)',
+      background:'rgba(255,255,255,0.65)',border:`1px solid rgba(255,255,255,0.80)`,
+      boxShadow:sCard,
     }},
       h('div',{style:{position:'relative',height:136,overflow:'hidden'}},
         h('img',{src:pic(252,136,adv.photo),alt:adv.name,style:{
@@ -1848,8 +1848,8 @@ function HomeFriendsCards({likedPosts,onLike}){
       const rel=POST_RELATIONS[i%POST_RELATIONS.length];
       return h('div',{key:post.id,style:{
         width:252,flexShrink:0,borderRadius:20,overflow:'hidden',
-        background:'rgba(28,28,40,0.92)',border:`1px solid rgba(255,255,255,0.07)`,
-        boxShadow:'0 4px 24px rgba(0,0,0,0.5)',
+        background:'rgba(255,255,255,0.65)',border:`1px solid rgba(255,255,255,0.80)`,
+        boxShadow:sCard,
       }},
         h('div',{style:{position:'relative',height:152,overflow:'hidden'}},
           h('img',{src:pic(252,152,post.photo),alt:post.title,style:{
@@ -1889,8 +1889,8 @@ function HomeScreen({likedPosts,onLike}){
   // Inline stat card
   const StatCard=({number,label,Icon})=>h('div',{style:{
     flex:1,borderRadius:22,
-    background:'rgba(28,28,40,0.94)',
-    border:`1px solid rgba(255,255,255,0.07)`,
+    background:'rgba(255,255,255,0.68)',
+    border:`1px solid rgba(255,255,255,0.82)`,
     padding:'16px 16px 18px',
     display:'flex',alignItems:'flex-end',justifyContent:'space-between',
     boxShadow:'0 4px 24px rgba(0,0,0,0.4)',
@@ -1915,7 +1915,7 @@ function HomeScreen({likedPosts,onLike}){
     /* teal radial glow */
     h('div',{style:{
       position:'absolute',top:0,left:0,right:0,height:320,
-      background:'radial-gradient(ellipse 100% 55% at 50% 0%,rgba(0,180,220,0.20) 0%,transparent 70%)',
+      background:'radial-gradient(ellipse 100% 55% at 50% 0%,rgba(255,255,255,0.30) 0%,transparent 70%)',
       pointerEvents:'none',zIndex:0,
     }}),
     h(StatusBar,{}),
@@ -1961,8 +1961,8 @@ function HomeScreen({likedPosts,onLike}){
         ...['recent','upcoming','friends'].map(t=>
           h('button',{key:t,onClick:()=>setActiveTab(t),style:{
             height:38,padding:'0 22px',borderRadius:19,flexShrink:0,
-            background:activeTab===t?C.cyan:'rgba(28,28,40,0.9)',
-            border:`1.5px solid ${activeTab===t?C.cyan:'rgba(255,255,255,0.10)'}`,
+            background:activeTab===t?C.cyan:'rgba(255,255,255,0.55)',
+            border:`1.5px solid ${activeTab===t?C.cyan:'rgba(255,255,255,0.80)'}`,
             fontSize:14,fontWeight:700,fontFamily:FONT_H,
             color:activeTab===t?'#061018':C.textMuted,
             transition:'all 0.18s ease',
@@ -1978,13 +1978,13 @@ function HomeScreen({likedPosts,onLike}){
   );
 }
 
-// ── Bottom Nav — floating frosted glass pill, icons only ───────────────────
+// ── Bottom Nav — expandable tabs (21st.dev pattern) ───────────────────────
 const NAV=[
-  {key:'home',Icon:Home},
-  {key:'map',Icon:Map},
-  {key:'friends',Icon:Users},
-  {key:'plan',Icon:CalendarDays},
-  {key:'profile',Icon:User},
+  {key:'home',   Icon:Home,        label:'Home'},
+  {key:'map',    Icon:Map,         label:'Map'},
+  {key:'friends',Icon:Users,       label:'Friends'},
+  {key:'plan',   Icon:CalendarDays,label:'Plan'},
+  {key:'profile',Icon:User,        label:'Profile'},
 ];
 function BottomNav({active,onChange}){
   return h('div',{style:{
@@ -1994,19 +1994,38 @@ function BottomNav({active,onChange}){
     display:'flex',alignItems:'center',justifyContent:'space-around',
     zIndex:40,
     boxShadow:'0 8px 40px rgba(0,0,0,0.45)',
-    padding:'0 4px',
+    padding:'0 6px',
   }},
     ...NAV.map(tab=>{
       const on=active===tab.key;
       return h('button',{key:tab.key,onClick:()=>onChange(tab.key),style:{
         display:'flex',alignItems:'center',justifyContent:'center',
-        width:46,height:42,borderRadius:14,
-        background:on?'rgba(0,207,255,0.12)':'transparent',
-        transition:'all 0.2s ease',
+        gap:on?6:0,
+        height:40,
+        padding:on?'0 14px':'0 10px',
+        borderRadius:20,
+        flexShrink: on?0:1,
+        background:on?C.cyan:'transparent',
+        border:'none',cursor:'pointer',
+        transition:'all 0.4s cubic-bezier(0.34,1.56,0.64,1)',
+        overflow:'hidden',
+        minWidth: on ? undefined : 36,
       }},
-        h(tab.Icon,{size:20,
-          color:on?C.cyan:'rgba(255,255,255,0.35)',
-          strokeWidth:on?2.2:1.8})
+        h(tab.Icon,{size:19,
+          color:on?'#FFFFFF':'rgba(15,25,35,0.42)',
+          strokeWidth:on?2.4:1.8,
+          style:{flexShrink:0},
+        }),
+        h('span',{style:{
+          fontSize:13,fontWeight:800,
+          color:'#FFFFFF',
+          fontFamily:FONT_H,
+          whiteSpace:'nowrap',
+          maxWidth:on?72:0,
+          opacity:on?1:0,
+          overflow:'hidden',
+          transition:'max-width 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.25s ease',
+        }},tab.label)
       );
     })
   );
@@ -2033,8 +2052,9 @@ function App(){
 
   return h('div',{style:{
     width:390,height:844,borderRadius:50,overflow:'hidden',
-    position:'relative',background:C.bg,
-    boxShadow:'0 50px 100px rgba(0,0,0,0.6),0 0 0 1px rgba(0,0,0,0.4),inset 0 0 0 1px rgba(255,255,255,0.06)',
+    position:'relative',
+    background:'radial-gradient(ellipse 160% 90% at 50% 0%, #D8E4EC 0%, #8FAFC4 100%)',
+    boxShadow:'0 50px 100px rgba(15,25,35,0.35),0 0 0 1px rgba(15,25,35,0.15)',
     flexShrink:0,
   }},
     // Home — default landing tab

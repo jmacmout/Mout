@@ -1441,14 +1441,63 @@ function PlanScreen(){
   return h(PlanListView,{onNew:openNew,onOpen:openDetail});
 }
 
+// ── Profile: swipeable adventure carousel ──────────────────────────────────
+function ProfileAdventureCarousel(){
+  const [active,setActive]=S(0);
+  const ref=R(null);
+  const CARD_W=300,GAP=14;
+  const onScroll=()=>{
+    const el=ref.current; if(!el) return;
+    setActive(Math.round(el.scrollLeft/(CARD_W+GAP)));
+  };
+  return h('div',{},
+    /* Scroll-snap track — one hero card with a peek of the next */
+    h('div',{ref,onScroll,style:{
+      display:'flex',gap:GAP,overflowX:'auto',
+      scrollSnapType:'x mandatory',scrollbarWidth:'none',
+      padding:'0 20px 2px',WebkitOverflowScrolling:'touch',
+    }},
+      ...MY_ADVENTURES.map((post,i)=>h('div',{key:post.id,style:{
+        width:CARD_W,flexShrink:0,scrollSnapAlign:'center',
+        height:300,borderRadius:26,overflow:'hidden',position:'relative',
+        boxShadow:'0 14px 44px rgba(0,0,0,0.58)',
+        border:'1px solid rgba(255,255,255,0.09)',cursor:'pointer',
+      }},
+        h('img',{src:pic(CARD_W,300,post.photo),alt:post.title,style:{
+          width:'100%',height:'100%',objectFit:'cover',display:'block'}}),
+        h('div',{style:{position:'absolute',inset:0,
+          background:'linear-gradient(to bottom,rgba(0,0,0,0.10) 0%,transparent 32%,rgba(0,0,0,0.82) 100%)'}}),
+        /* Counter chip */
+        h('div',{style:{position:'absolute',top:14,right:14,...glassStyle,borderRadius:20,
+          padding:'5px 11px',fontSize:11,fontWeight:800,color:C.white,fontFamily:FONT_H,letterSpacing:'0.3px'}},
+          `${i+1} / ${MY_ADVENTURES.length}`),
+        /* Title + glass stat chips */
+        h('div',{style:{position:'absolute',left:0,right:0,bottom:0,padding:'0 18px 18px'}},
+          h('p',{style:{fontSize:22,fontWeight:900,color:C.white,fontFamily:FONT_H,
+            letterSpacing:'-0.4px',lineHeight:1.1,marginBottom:11,
+            textShadow:'0 2px 10px rgba(0,0,0,0.6)'}},post.title),
+          h('div',{style:{display:'flex',alignItems:'center',gap:8}},
+            ...[['🥾',post.dist],['📈',post.elev],['⏱',post.dur]].map(([ic,val],k)=>
+              h('span',{key:k,style:{...glassStyle,borderRadius:10,padding:'5px 9px',
+                fontSize:11,fontWeight:700,color:C.white,fontFamily:FONT_B}},ic+' '+val))
+          )
+        )
+      ))
+    ),
+    /* Page dots — active one stretches into a pill */
+    h('div',{style:{display:'flex',justifyContent:'center',alignItems:'center',gap:7,marginTop:16}},
+      ...MY_ADVENTURES.map((_,i)=>h('div',{key:i,style:{
+        width:active===i?22:7,height:7,borderRadius:4,
+        background:active===i?C.cyan:'rgba(255,255,255,0.22)',
+        boxShadow:active===i?'0 0 10px rgba(0,207,255,0.5)':'none',
+        transition:'all 0.28s cubic-bezier(0.32,0.72,0,1)',
+      }}))
+    )
+  );
+}
+
 // ── Profile Screen ─────────────────────────────────────────────────────────
 function ProfileScreen({onPremium,onOpenCreate}){
-  const posts=MY_ADVENTURES;
-  const N=posts.length;
-  const CARD_H=222;
-  const PEEK_H=56;
-  const stackH=CARD_H+PEEK_H*(N-1);
-
   return h('div',{style:{position:'absolute',inset:0,background:C.bg}},
 
     /* ── Teal radial glow (same language as Friends/Create pages) ── */
@@ -1520,86 +1569,8 @@ function ProfileScreen({onPremium,onOpenCreate}){
         h('span',{style:{fontSize:12,color:C.cyan,fontWeight:600,fontFamily:FONT_B}},'See all')
       ),
 
-      /* ── Stacked deck ── */
-      h('div',{style:{position:'relative',height:stackH,margin:'0 16px'}},
-        /* Render back-to-front so highest revIdx (front card) is last in DOM → naturally on top */
-        ...[...posts].reverse().map((post,revIdx)=>{
-          const isFront   = revIdx === N-1;
-          const fromFront = N-1-revIdx;          // 0 = front, N-1 = back
-          const scaleVal  = 1 - fromFront*0.045; // 0.865, 0.91, 0.955, 1.0
-          const topVal    = revIdx * PEEK_H;
-          const zIdx      = revIdx + 1;
-          // Darker overlay on cards further back for perceived depth
-          const overlayAlpha = 0.65 - revIdx * 0.18; // 0.65 → 0.47 → 0.29 → 0.11
-
-          return h('div',{
-            key:post.id,
-            style:{
-              position:'absolute',
-              top:topVal,left:0,right:0,
-              height:CARD_H,
-              borderRadius:22,
-              overflow:'hidden',
-              zIndex:zIdx,
-              transform:`scale(${scaleVal})`,
-              transformOrigin:'center top',
-              cursor:'pointer',
-              boxShadow:isFront
-                ?'0 14px 48px rgba(0,0,0,0.70),0 4px 16px rgba(0,0,0,0.4)'
-                :'0 4px 18px rgba(0,0,0,0.45)',
-              transition:'transform 0.22s ease,box-shadow 0.22s ease',
-            }
-          },
-            /* Photo */
-            h('img',{src:pic(380,CARD_H,post.photo),alt:post.title,style:{
-              width:'100%',height:'100%',objectFit:'cover',display:'block',
-            }}),
-            /* Depth overlay — darker for cards further back */
-            h('div',{style:{
-              position:'absolute',inset:0,
-              background:`rgba(0,0,0,${overlayAlpha})`,
-            }}),
-            /* Bottom gradient on front card for text legibility */
-            isFront&&h('div',{style:{
-              position:'absolute',inset:0,
-              background:'linear-gradient(to bottom,transparent 30%,rgba(0,0,0,0.78) 100%)',
-            }}),
-            /* Small avatar top-left */
-            h('img',{src:pic(34,34,post.avatar),alt:'',style:{
-              position:'absolute',top:12,left:12,
-              width:34,height:34,borderRadius:'50%',objectFit:'cover',
-              border:'2px solid rgba(255,255,255,0.65)',
-              boxShadow:'0 2px 8px rgba(0,0,0,0.5)',
-            }}),
-            /* Title overlay */
-            h('div',{style:{
-              position:'absolute',
-              bottom:isFront?16:10,
-              left:14,right:14,
-            }},
-              h('p',{style:{
-                fontSize:isFront?17:14,
-                fontWeight:700,
-                color:C.white,
-                fontFamily:FONT_H,
-                lineHeight:1.2,
-                letterSpacing:'-0.2px',
-                textShadow:'0 1px 6px rgba(0,0,0,0.6)',
-              }},post.title),
-              /* Stats row on the front card only */
-              isFront&&h('div',{style:{
-                display:'flex',alignItems:'center',gap:10,marginTop:5,
-              }},
-                h('span',{style:{fontSize:11,color:'rgba(255,255,255,0.78)',fontFamily:FONT_B}},`🥾 ${post.dist}`),
-                h('span',{style:{color:'rgba(255,255,255,0.32)',fontSize:11}},'·'),
-                h('span',{style:{fontSize:11,color:'rgba(255,255,255,0.78)',fontFamily:FONT_B}},post.elev),
-                h('span',{style:{color:'rgba(255,255,255,0.32)',fontSize:11}},'·'),
-                h('span',{style:{fontSize:11,color:'rgba(255,255,255,0.78)',fontFamily:FONT_B}},post.dur)
-              )
-            )
-          );
-        })
-      )
+      /* ── Swipeable adventure carousel ── */
+      h(ProfileAdventureCarousel,{})
     ),
 
     /* ── "Add Adventure" button — floating above bottom nav ── */
@@ -1611,18 +1582,24 @@ function ProfileScreen({onPremium,onOpenCreate}){
         onClick:onOpenCreate,
         style:{
           width:'100%',
-          background:'linear-gradient(135deg,#00D8FF 0%,#00BFEF 100%)',
-          borderRadius:32,
-          padding:'15px 20px',
+          ...glassStyle,
+          border:'1px solid rgba(0,207,255,0.38)',
+          borderRadius:30,
+          padding:'12px 20px',
           fontSize:16,fontWeight:800,
-          color:'#061018',
+          color:C.white,
           fontFamily:FONT_H,
-          boxShadow:'0 4px 22px rgba(0,207,255,0.40)',
+          boxShadow:'0 6px 28px rgba(0,0,0,0.45),0 0 22px rgba(0,207,255,0.14)',
           display:'flex',alignItems:'center',justifyContent:'center',
-          gap:8,
+          gap:11,
         }
       },
-        h(Plus,{size:18,color:'#061018',strokeWidth:2.8}),
+        h('div',{style:{
+          width:28,height:28,borderRadius:'50%',flexShrink:0,
+          background:'linear-gradient(135deg,#00D8FF,#00BFEF)',
+          display:'flex',alignItems:'center',justifyContent:'center',
+          boxShadow:'0 2px 10px rgba(0,207,255,0.5)',
+        }},h(Plus,{size:17,color:'#061018',strokeWidth:3})),
         'Add Adventure'
       )
     )

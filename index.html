@@ -1,0 +1,2104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Mout — Your outdoor life, mapped.</title>
+<script src="/config.js"></script>
+<!-- Manrope accent / heading font -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  width:100%;height:100%;
+  background:#0A0A12;
+  display:flex;align-items:center;justify-content:center;
+  min-height:100vh;
+  font-family:'SF Pro Text',-apple-system,BlinkMacSystemFont,'Manrope',sans-serif;
+}
+#root{display:flex;align-items:center;justify-content:center;width:100%;height:100%;padding:24px}
+button{border:none;background:none;cursor:pointer;font-family:inherit}
+input,textarea{border:none;outline:none;background:none;font-family:inherit;resize:none;width:100%;color:#fff}
+input::placeholder,textarea::placeholder{color:rgba(255,255,255,0.32)}
+::-webkit-scrollbar{width:0;height:0}
+/* MapLibre overrides for dark theme */
+.maplibregl-ctrl-attrib{
+  font-size:9px!important;
+  background:rgba(14,14,24,0.75)!important;
+  color:rgba(255,255,255,0.45)!important;
+  border-radius:6px!important;
+}
+.maplibregl-ctrl-attrib a{color:rgba(255,255,255,0.45)!important}
+.maplibregl-ctrl-bottom-right{bottom:92px!important;right:56px!important}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.344.0"
+  }
+}
+</script>
+<script type="module">
+import React,{useState,useCallback,useMemo,useEffect,useRef} from 'react';
+import{createRoot} from 'react-dom/client';
+import{
+  Map,Users,Plus,Bookmark,User,MapPin,Heart,MessageCircle,
+  MoreHorizontal,Mountain,Navigation,Clock,Bell,Search,Crown,
+  Check,ImagePlus,X,Minus,ChevronLeft,ChevronDown,Camera,
+  Pencil,Settings2,CalendarDays,ExternalLink,Send,Home
+} from 'lucide-react';
+
+const h=React.createElement;
+const {useState:S,useCallback:CB,useMemo:M,useEffect:E,useRef:R}=React;
+
+// ── Dark Design System ─────────────────────────────────────────────────────
+const C={
+  // Backgrounds
+  bg:'#14141F',
+  bgCard:'#1C1C28',
+  bgElevated:'#252532',
+  bgOverlay:'rgba(14,14,24,0.88)',
+
+  // Cyan accent
+  cyan:'#00CFFF',
+  cyanDark:'#0099CC',
+  cyanGlow:'rgba(0,207,255,0.22)',
+
+  // Text
+  white:'#FFFFFF',
+  textPrimary:'#FFFFFF',
+  textSecondary:'rgba(255,255,255,0.55)',
+  textMuted:'rgba(255,255,255,0.32)',
+
+  // Borders
+  border:'rgba(255,255,255,0.07)',
+  borderLight:'rgba(255,255,255,0.12)',
+
+  // Semantic
+  gold:'#F0A500',
+  danger:'#FF5C5C',
+
+  // Map trail (keep natural green)
+  trail:'#4A7C59',
+};
+
+const CYAN_GRAD=`linear-gradient(135deg,#00CFFF,#0099CC)`;
+const sCard='0 4px 24px rgba(0,0,0,0.5)';
+const sCyan='0 4px 20px rgba(0,207,255,0.28)';
+const pic=(w,h,s)=>`https://picsum.photos/${w}/${h}?random=${s}`;
+// Typography
+const FONT_H="'Manrope','SF Pro Display',-apple-system,sans-serif";
+const FONT_B="'SF Pro Text',-apple-system,BlinkMacSystemFont,sans-serif";
+// Frosted glass style helper
+const GLASS='rgba(14,14,24,0.65)';
+const glassStyle={background:GLASS,backdropFilter:'blur(18px) saturate(180%)',WebkitBackdropFilter:'blur(18px) saturate(180%)',border:`1px solid rgba(255,255,255,0.10)`};
+// Map type options (2D Map is free, others are premium)
+const MAP_OPTIONS=[
+  {label:'2D Map',value:'visited',premium:false},
+  {label:'3D Topo Map',value:'topo',premium:true},
+  {label:'Wishlist Map',value:'wishlist',premium:true},
+];
+
+// ── MapTiler config ────────────────────────────────────────────────────────
+// Replace with your MapTiler API key from maptiler.com/cloud — free tier available
+const mKey=()=>window.MAPTILER_KEY||'MAPTILER_KEY_HERE';
+const OUTDOOR_STYLE=()=>`https://api.maptiler.com/maps/outdoor-v2/style.json?key=${mKey()}`;
+const TOPO_STYLE=()=>`https://api.maptiler.com/maps/topo-v2/style.json?key=${mKey()}`;
+const TERRAIN_URL=()=>`https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${mKey()}`;
+
+// ── Map & App Data ─────────────────────────────────────────────────────────
+const LOCATIONS=[
+  {id:1,coords:[-119.5383,37.8651],name:'Half Dome',location:'Yosemite NP',photo:10,postId:1},
+  {id:2,coords:[-110.8026,43.7904],name:'Grand Teton',location:'Grand Teton NP',photo:20,postId:2},
+  {id:3,coords:[-113.0263,37.2982],name:'Angels Landing',location:'Zion NP',photo:30,postId:3},
+  {id:4,coords:[-105.6836,40.3428],name:'Sky Pond',location:'Rocky Mountain NP',photo:40,postId:4},
+  {id:5,coords:[-123.4998,47.8021],name:'Hurricane Ridge',location:'Olympic NP',photo:50,postId:null},
+];
+const WISHLIST_MAP_LOCS=[
+  {coords:[-112.6986,36.2561],name:'Havasupai Falls'},
+  {coords:[-112.0061,36.9965],name:'The Wave'},
+  {coords:[-121.7269,46.8523],name:'Wonderland Trail'},
+  {coords:[-109.8983,38.5733],name:'Canyonlands'},
+  {coords:[-104.9533,38.8742],name:'Pikes Peak'},
+];
+const TRAILS_GEOJSON={
+  type:'FeatureCollection',
+  features:[
+    {type:'Feature',geometry:{type:'LineString',coordinates:[
+      [-119.5383,37.8651],[-119.5310,37.8720],[-119.5250,37.8800],[-119.5180,37.8860]
+    ]},properties:{name:'Half Dome Trail'}},
+    {type:'Feature',geometry:{type:'LineString',coordinates:[
+      [-110.8026,43.7904],[-110.7950,43.8000],[-110.7880,43.8100],[-110.7820,43.8200]
+    ]},properties:{name:'Grand Teton Trail'}},
+    {type:'Feature',geometry:{type:'LineString',coordinates:[
+      [-113.0263,37.2982],[-113.0200,37.3050],[-113.0140,37.3110],[-113.0080,37.3170]
+    ]},properties:{name:'Angels Landing Trail'}},
+  ]
+};
+const POSTS=[
+  {id:1,title:'Half Dome Summit',location:'Yosemite National Park',user:'Sarah M.',avatar:42,photo:11,caption:'Nothing prepares you for that view. The cables at sunrise, the drop on both sides — you just have to be there.',dist:'4.2mi',elev:'2,693ft',dur:'8h 32m',likes:47,comments:14},
+  {id:2,title:'Lost Coast Backpack',location:'King Range, CA',user:'Jake R.',avatar:53,photo:22,caption:'Three days of zero cell service. Needed it. Black sand beaches as far as you can see.',dist:'24.1mi',elev:'3,100ft',dur:'3 days',likes:89,comments:31},
+  {id:3,title:'Enchantments Traverse',location:'Alpine Lakes Wilderness',user:'Mia C.',avatar:64,photo:33,caption:'Lottery win = best September of my life. Larches were glowing gold the entire traverse.',dist:'18.6mi',elev:'4,400ft',dur:'11h',likes:134,comments:52},
+  {id:4,title:'Mt. Tallac at Sunrise',location:'Lake Tahoe',user:'Alex P.',avatar:75,photo:44,caption:'Left the car at 4am. Worth every step. Lake Tahoe spread out below like a mirror.',dist:'9.4mi',elev:'3,200ft',dur:'6h 15m',likes:62,comments:23},
+];
+const WISHLIST=[
+  {id:1,title:'Havasupai Falls',subtitle:'Supai, Arizona',tags:['National Park','Permit Required'],seed:101},
+  {id:2,title:'The Wave',subtitle:'Coyote Buttes, Utah',tags:['Lottery','Sandstone'],seed:102},
+  {id:3,title:'Laugavegur Trail',subtitle:'Iceland',tags:['Multi-day','International'],seed:103},
+  {id:4,title:'Fitz Roy Trek',subtitle:'Patagonia, Argentina',tags:['International','Technical'],seed:104},
+  {id:5,title:'Wonderland Trail',subtitle:'Mt. Rainier, WA',tags:['93 miles','Permit Required'],seed:105},
+];
+const BENEFITS=[
+  {title:'Up to 10 photos per adventure',sub:'Free includes 1 photo'},
+  {title:'Wishlist map toggle',sub:'See your dream destinations on your life map'},
+  {title:'Heatmap overlay',sub:"Visualize everywhere you've ever explored"},
+  {title:'3D topo map toggle',sub:'See terrain in stunning relief'},
+  {title:'Unlimited wishlist saves',sub:'Free includes up to 10 saved places'},
+  {title:'Organize wishlist into lists',sub:"Create lists like 'Next summer' or 'With family'"},
+  {title:'Priority customer support',sub:'Get help from real humans, fast'},
+];
+
+// Plan page mock data
+const PLAN_ADVENTURES=[
+  {id:1,name:'Saturday Hike',trail:'Angels Landing',
+   going:[42,53,64,75,81],date:'Saturday, July 18',time:'8:00 AM',
+   creator:'Jackson',creatorAvatar:99,photo:30,
+   description:"Meeting at the main trailhead parking lot. Bring plenty of water — it gets hot! The chain section is intense but the views from the top are absolutely unreal. Let's plan to be at the trailhead by 7:45."},
+  {id:2,name:'Sunrise Summit',trail:'Half Dome',
+   going:[53,64,75],date:'Sunday, July 27',time:'5:30 AM',
+   creator:'Sarah',creatorAvatar:42,photo:11,
+   description:'Early start is non-negotiable — cables are way less crowded before 9am. Permits already secured for the full group. Haul bags welcome. Plan to be at the parking area by 5am for a quick pre-hike stretch.'},
+  {id:3,name:'Weekend Backpack',trail:'The Enchantments',
+   going:[64,75,81,42],date:'August 2 – 3',time:'All Day',
+   creator:'Jake',creatorAvatar:53,photo:22,
+   description:'Two-day traverse with a car shuttle arranged from the Upper to Lower trailhead. Lottery permit was won — lucky us! Full camping kit required. Bear canisters are mandatory on this one.'},
+];
+const PLAN_COMMENTS=[
+  {id:1,avatar:42,name:'Sarah M.',text:'So pumped! Should we carpool from the visitor center?',time:'2h'},
+  {id:2,avatar:53,name:'Jake R.',text:"I'm in for driving if people want to meet at my place first 🚐",time:'1h'},
+  {id:3,avatar:64,name:'Mia C.',text:'Bringing the good camera this time 📷',time:'45m'},
+];
+
+// My profile adventure cards (stacked deck on Profile page)
+const MY_ADVENTURES=[
+  {id:1,title:'Half Dome Summit',photo:11,avatar:99,dist:'4.2mi',elev:'2,693ft',dur:'8h 32m'},
+  {id:2,title:'Enchantments Traverse',photo:33,avatar:99,dist:'18.6mi',elev:'4,400ft',dur:'11h'},
+  {id:3,title:'Lost Coast Backpack',photo:22,avatar:99,dist:'24.1mi',elev:'3,100ft',dur:'3 days'},
+  {id:4,title:'Angels Landing',photo:44,avatar:99,dist:'8.3mi',elev:'1,488ft',dur:'5h 20m'},
+];
+
+// ── Micro-components ───────────────────────────────────────────────────────
+function StatusBar(){
+  return h('div',{style:{position:'absolute',top:0,left:0,right:0,height:54,
+    display:'flex',alignItems:'center',justifyContent:'space-between',
+    padding:'14px 24px 0',zIndex:50,pointerEvents:'none'}},
+    h('span',{style:{fontWeight:600,fontSize:15,color:C.white}},'9:41'),
+    h('div',{style:{display:'flex',alignItems:'center',gap:5}},
+      [4,3,2].map(bh=>h('div',{key:bh,style:{width:3,height:bh*3,borderRadius:1,
+        background:C.white,opacity:0.9}})),
+      h('div',{style:{width:16,height:11,borderRadius:2,border:`1.5px solid ${C.white}`,
+        marginLeft:4,position:'relative',display:'flex',alignItems:'center',padding:'0 2px'}},
+        h('div',{style:{flex:1,height:6,background:C.white,borderRadius:1}}))
+    )
+  );
+}
+
+function LocationPill({name}){
+  return h('div',{style:{display:'inline-flex',alignItems:'center',gap:4,
+    background:'rgba(14,14,24,0.75)',backdropFilter:'blur(8px)',
+    borderRadius:10,padding:'4px 10px'}},
+    h(MapPin,{size:12,color:C.cyan,strokeWidth:2.5}),
+    h('span',{style:{fontSize:11,fontWeight:600,color:C.white}},name)
+  );
+}
+
+function Tag({label}){
+  return h('span',{style:{background:C.bgElevated,color:C.cyan,borderRadius:20,
+    padding:'3px 10px',fontSize:11,fontWeight:600}},label);
+}
+
+// Cyan gradient primary button
+function CyanBtn({children,onClick,style={},fullWidth=false}){
+  return h('button',{onClick,style:{
+    background:CYAN_GRAD,color:C.white,
+    borderRadius:28,padding:'14px 28px',
+    fontSize:15,fontWeight:700,
+    boxShadow:sCyan,
+    width:fullWidth?'100%':undefined,
+    display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+    transition:'transform 0.15s ease,box-shadow 0.15s ease',
+    ...style,
+  }},children);
+}
+
+// ── Postcard ───────────────────────────────────────────────────────────────
+function Postcard({post,compact=false,likedPosts,onLike}){
+  const [pulse,setPulse]=S(false);
+  const liked=likedPosts.has(post.id);
+  const photoH=compact?160:220;
+  const handleLike=()=>{setPulse(true);setTimeout(()=>setPulse(false),200);onLike(post.id);};
+
+  return h('div',{style:{borderRadius:20,overflow:'hidden',background:C.bgCard,boxShadow:sCard}},
+    // Photo
+    h('div',{style:{position:'relative',height:photoH,overflow:'hidden'}},
+      h('img',{src:pic(400,photoH,post.photo||post.seed),alt:post.title,
+        style:{width:'100%',height:'100%',objectFit:'cover',display:'block'}}),
+      h('div',{style:{position:'absolute',inset:0,
+        background:'linear-gradient(to top,rgba(0,0,0,0.55) 0%,transparent 55%)'}}),
+      h('div',{style:{position:'absolute',bottom:12,left:12}},h(LocationPill,{name:post.location}))
+    ),
+    // Body
+    h('div',{style:{padding:'14px 16px'}},
+      h('div',{style:{display:'flex',alignItems:'center',gap:10}},
+        h('img',{src:pic(32,32,post.avatar),alt:'',
+          style:{width:32,height:32,borderRadius:'50%',objectFit:'cover',flexShrink:0,
+            border:`1.5px solid ${C.cyan}`}}),
+        h('div',{style:{flex:1}},
+          h('span',{style:{fontSize:13,fontWeight:700,color:C.white}},post.user)),
+        h('span',{style:{fontSize:11,color:C.textMuted,marginRight:8}},'2h ago'),
+        h(MoreHorizontal,{size:16,color:C.textMuted})
+      ),
+      h('p',{style:{fontSize:13,color:C.textSecondary,lineHeight:1.55,marginTop:9,
+        display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}},
+        post.caption),
+      h('div',{style:{display:'flex',alignItems:'center',gap:6,marginTop:10}},
+        h(Mountain,{size:12,color:C.textMuted}),
+        h('span',{style:{fontSize:11,color:C.textMuted,fontWeight:500}},post.elev),
+        h('span',{style:{color:C.border,fontSize:11}},'·'),
+        h(Navigation,{size:12,color:C.textMuted}),
+        h('span',{style:{fontSize:11,color:C.textMuted,fontWeight:500}},post.dist),
+        h('span',{style:{color:C.border,fontSize:11}},'·'),
+        h(Clock,{size:12,color:C.textMuted}),
+        h('span',{style:{fontSize:11,color:C.textMuted,fontWeight:500}},post.dur)
+      ),
+      h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',
+        marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}},
+        h('button',{onClick:handleLike,style:{display:'flex',alignItems:'center',gap:6,
+          transform:pulse?'scale(1.3)':'scale(1)',transition:'transform 0.2s ease'}},
+          h(Heart,{size:20,color:liked?C.danger:C.textMuted,fill:liked?C.danger:'none',strokeWidth:2}),
+          h('span',{style:{fontSize:13,fontWeight:600,color:liked?C.danger:C.textMuted}},
+            post.likes+(liked?1:0))
+        ),
+        h('div',{style:{display:'flex',alignItems:'center',gap:14}},
+          h('div',{style:{display:'flex',alignItems:'center',gap:6}},
+            h(MessageCircle,{size:20,color:C.textMuted,strokeWidth:2}),
+            h('span',{style:{fontSize:13,fontWeight:600,color:C.textMuted}},post.comments)
+          ),
+          h(Bookmark,{size:20,color:C.textMuted,strokeWidth:2})
+        )
+      )
+    )
+  );
+}
+
+// ── Map Screen ─────────────────────────────────────────────────────────────
+function MapScreen({likedPosts,onLike,isActive,onPremium}){
+  const containerRef=R(null);
+  const mapRef=R(null);
+  const markersRef=R([]);
+  const dropdownRef=R(null);
+  const prevToggleRef=R('visited');
+  const [toggle,setToggle]=S('visited');
+  const [dropdownOpen,setDropdownOpen]=S(false);
+  const [selPin,setSelPin]=S(null);
+  const [sheetVisible,setSheetVisible]=S(false);
+  const [mapReady,setMapReady]=S(false);
+
+  // Close dropdown when clicking outside
+  E(()=>{
+    const handler=e=>{if(dropdownRef.current&&!dropdownRef.current.contains(e.target))setDropdownOpen(false);};
+    document.addEventListener('mousedown',handler);
+    return ()=>document.removeEventListener('mousedown',handler);
+  },[]);
+
+  const handleMapType=(opt)=>{
+    setDropdownOpen(false);
+    if(opt.premium){onPremium();return;}
+    setToggle(opt.value);
+  };
+
+  const currentOption=MAP_OPTIONS.find(o=>o.value===toggle)||MAP_OPTIONS[0];
+
+  E(()=>{if(selPin)requestAnimationFrame(()=>setSheetVisible(true));},[selPin]);
+  const closeSheet=CB(()=>{setSheetVisible(false);setTimeout(()=>setSelPin(null),350);},[]);
+
+  const addMarkersAndRoutes=CB((map,mode)=>{
+    markersRef.current.forEach(m=>m.remove());
+    markersRef.current=[];
+    if(mode==='visited'||mode==='topo'){
+      LOCATIONS.forEach(loc=>{
+        const el=document.createElement('div');
+        el.style.cssText=`
+          width:44px;height:44px;border-radius:12px;overflow:hidden;
+          border:2.5px solid #00CFFF;
+          box-shadow:0 4px 16px rgba(0,207,255,0.35),0 2px 8px rgba(0,0,0,0.5);
+          cursor:pointer;background-image:url(${pic(80,80,loc.photo)});
+          background-size:cover;transition:transform 0.15s ease;
+        `;
+        el.addEventListener('mouseenter',()=>{el.style.transform='scale(1.12)';});
+        el.addEventListener('mouseleave',()=>{el.style.transform='scale(1)';});
+        el.addEventListener('click',()=>setSelPin(loc));
+        markersRef.current.push(
+          new window.maplibregl.Marker({element:el}).setLngLat(loc.coords).addTo(map)
+        );
+      });
+      if(!map.getSource('trails')){
+        map.addSource('trails',{type:'geojson',data:TRAILS_GEOJSON});
+      }
+      if(!map.getLayer('trails-layer')){
+        map.addLayer({
+          id:'trails-layer',type:'line',source:'trails',
+          layout:{'line-join':'round','line-cap':'round'},
+          paint:{'line-color':'#4A7C59','line-width':3,'line-opacity':0.85},
+        });
+      }
+    } else if(mode==='wishlist'){
+      WISHLIST_MAP_LOCS.forEach(loc=>{
+        const el=document.createElement('div');
+        el.style.cssText=`
+          width:36px;height:36px;border-radius:50%;
+          background:#F0A500;border:2.5px solid rgba(255,255,255,0.9);
+          box-shadow:0 2px 12px rgba(240,165,0,0.55);
+          cursor:pointer;display:flex;align-items:center;justify-content:center;
+          transition:transform 0.15s ease;
+        `;
+        el.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>';
+        el.addEventListener('mouseenter',()=>{el.style.transform='scale(1.15)';});
+        el.addEventListener('mouseleave',()=>{el.style.transform='scale(1)';});
+        markersRef.current.push(
+          new window.maplibregl.Marker({element:el}).setLngLat(loc.coords).addTo(map)
+        );
+      });
+    }
+  },[]);
+
+  E(()=>{
+    if(mapRef.current) return;
+    if(!containerRef.current) return;
+    if(!document.querySelector('[data-ml-css]')){
+      const link=document.createElement('link');
+      link.rel='stylesheet';
+      link.href='https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css';
+      link.setAttribute('data-ml-css','1');
+      document.head.appendChild(link);
+    }
+    const initMap=()=>{
+      if(mapRef.current||!containerRef.current) return;
+      const map=new window.maplibregl.Map({
+        container:containerRef.current,
+        style:OUTDOOR_STYLE(),
+        center:[-119.5383,37.8651],
+        zoom:10,pitch:0,bearing:0,attributionControl:false,
+      });
+      map.addControl(new window.maplibregl.AttributionControl({compact:true}),'bottom-right');
+      map.once('load',()=>{addMarkersAndRoutes(map,'visited');setMapReady(true);});
+      mapRef.current=map;
+    };
+    if(window.maplibregl){initMap();}
+    else if(!document.querySelector('[data-ml-js]')){
+      const script=document.createElement('script');
+      script.src='https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js';
+      script.setAttribute('data-ml-js','1');
+      script.onload=initMap;
+      document.head.appendChild(script);
+    } else {
+      document.querySelector('[data-ml-js]').addEventListener('load',initMap);
+    }
+    return ()=>{
+      markersRef.current.forEach(m=>m.remove());
+      markersRef.current=[];
+      if(mapRef.current){mapRef.current.remove();mapRef.current=null;}
+    };
+  },[addMarkersAndRoutes]);
+
+  E(()=>{if(isActive&&mapRef.current)requestAnimationFrame(()=>mapRef.current?.resize());},[isActive]);
+
+  E(()=>{
+    const map=mapRef.current;
+    if(!map||!mapReady) return;
+    if(prevToggleRef.current===toggle) return;
+    const prev=prevToggleRef.current;
+    prevToggleRef.current=toggle;
+    if(toggle==='topo'){
+      map.setStyle(TOPO_STYLE());
+      map.once('styledata',()=>{
+        if(!map.getSource('terrain')){
+          map.addSource('terrain',{type:'raster-dem',url:TERRAIN_URL(),tileSize:256});
+        }
+        map.setTerrain({source:'terrain',exaggeration:1.5});
+        if(!map.getLayer('sky')){
+          map.addLayer({id:'sky',type:'sky',paint:{
+            'sky-type':'atmosphere','sky-atmosphere-sun':[0.0,90.0],
+            'sky-atmosphere-sun-intensity':15,
+          }});
+        }
+        map.easeTo({pitch:60,bearing:-20,duration:1200,easing:t=>t<0.5?2*t*t:-1+(4-2*t)*t});
+        addMarkersAndRoutes(map,'topo');
+      });
+    } else if(toggle==='visited'){
+      if(prev==='topo'){map.setTerrain(null);map.easeTo({pitch:0,bearing:0,duration:800});
+        map.setStyle(OUTDOOR_STYLE());map.once('styledata',()=>addMarkersAndRoutes(map,'visited'));
+      } else {addMarkersAndRoutes(map,'visited');}
+    } else if(toggle==='wishlist'){
+      if(prev==='topo'){map.setTerrain(null);map.easeTo({pitch:0,bearing:0,duration:800});
+        map.setStyle(OUTDOOR_STYLE());map.once('styledata',()=>addMarkersAndRoutes(map,'wishlist'));
+      } else {addMarkersAndRoutes(map,'wishlist');}
+    }
+  },[toggle,mapReady,addMarkersAndRoutes]);
+
+  const sheetPost=M(()=>{
+    if(!selPin) return null;
+    return POSTS.find(p=>p.id===selPin.postId)||{
+      id:selPin.id,title:selPin.name,location:selPin.location||selPin.name,
+      user:'You',avatar:99,photo:selPin.photo,
+      caption:'An incredible adventure at this destination.',
+      dist:'—',elev:'—',dur:'—',likes:0,comments:0,
+    };
+  },[selPin]);
+
+  return h('div',{style:{position:'absolute',inset:0}},
+    // Map fills full screen — floating nav sits on top
+    h('div',{ref:containerRef,style:{position:'absolute',inset:0}}),
+
+    // Minimal status bar backing — just enough for readability
+    h('div',{style:{position:'absolute',top:0,left:0,right:0,height:50,
+      background:'linear-gradient(to bottom,rgba(14,14,24,0.55) 0%,transparent 100%)',
+      pointerEvents:'none',zIndex:20}}),
+    h(StatusBar,{}),
+
+    // ── Floating top bar: Search (2/3) + Map type dropdown (1/3) ────────────
+    h('div',{style:{position:'absolute',top:58,left:12,right:12,zIndex:30,
+      display:'flex',gap:8,alignItems:'center'}},
+
+      // Search bar — 2/3 width
+      h('div',{style:{flex:2,height:46,borderRadius:23,...glassStyle,
+        display:'flex',alignItems:'center',gap:10,padding:'0 14px'}},
+        h(Search,{size:16,color:C.textSecondary,strokeWidth:2,flexShrink:0}),
+        h('span',{style:{fontSize:14,color:C.textMuted,fontFamily:FONT_B,
+          userSelect:'none',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},
+          'Search places…')
+      ),
+
+      // Map type dropdown — 1/3 width
+      h('div',{ref:dropdownRef,style:{flex:1,position:'relative'}},
+        // Trigger button
+        h('button',{
+          onClick:()=>setDropdownOpen(o=>!o),
+          style:{width:'100%',height:46,borderRadius:23,...glassStyle,
+            display:'flex',alignItems:'center',justifyContent:'space-between',
+            padding:'0 12px 0 14px',gap:4}},
+          h('span',{style:{fontSize:12,fontWeight:700,fontFamily:FONT_H,color:C.white,
+            whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',flex:1,textAlign:'left'}},
+            currentOption.label),
+          h(ChevronDown,{size:14,color:C.textSecondary,
+            style:{flexShrink:0,transform:dropdownOpen?'rotate(180deg)':'none',
+              transition:'transform 0.2s ease'}})
+        ),
+        // Dropdown list
+        dropdownOpen&&h('div',{style:{
+          position:'absolute',top:52,right:0,minWidth:170,
+          background:'rgba(18,18,28,0.94)',backdropFilter:'blur(24px) saturate(180%)',
+          WebkitBackdropFilter:'blur(24px) saturate(180%)',
+          borderRadius:18,border:`1px solid rgba(255,255,255,0.11)`,
+          overflow:'hidden',boxShadow:'0 8px 40px rgba(0,0,0,0.6)',zIndex:50}},
+          ...MAP_OPTIONS.map((opt,i)=>h('button',{key:opt.value,
+            onClick:()=>handleMapType(opt),
+            style:{width:'100%',padding:'13px 16px',
+              textAlign:'left',display:'flex',alignItems:'center',
+              justifyContent:'space-between',gap:10,
+              borderBottom:i<MAP_OPTIONS.length-1?`1px solid rgba(255,255,255,0.07)`:'none',
+              background:toggle===opt.value&&!opt.premium?'rgba(0,207,255,0.10)':'transparent',
+              transition:'background 0.15s ease'}},
+            h('span',{style:{fontSize:13,fontWeight:toggle===opt.value&&!opt.premium?700:500,
+              fontFamily:FONT_H,
+              color:toggle===opt.value&&!opt.premium?C.cyan:C.white}},opt.label),
+            opt.premium&&h('span',{style:{fontSize:9,fontWeight:800,fontFamily:FONT_H,
+              color:C.gold,background:'rgba(240,165,0,0.15)',
+              borderRadius:8,padding:'2px 7px',letterSpacing:'0.3px'}},'PRO')
+          ))
+        )
+      )
+    ),
+
+    // ── Zoom + locate controls — lower right, clear of dropdown ─────────────
+    h('div',{style:{position:'absolute',bottom:108,right:12,zIndex:30,
+      ...glassStyle,borderRadius:16,padding:4,
+      display:'flex',flexDirection:'column',gap:2}},
+      h('button',{onClick:()=>mapRef.current?.zoomIn(),
+        style:{width:36,height:36,borderRadius:10,
+          display:'flex',alignItems:'center',justifyContent:'center',color:C.white}},
+        h(Plus,{size:18,strokeWidth:2.5})),
+      h('div',{style:{height:1,background:'rgba(255,255,255,0.08)',margin:'0 4px'}}),
+      h('button',{onClick:()=>mapRef.current?.zoomOut(),
+        style:{width:36,height:36,borderRadius:10,
+          display:'flex',alignItems:'center',justifyContent:'center',color:C.white}},
+        h(Minus,{size:18,strokeWidth:2.5})),
+      h('div',{style:{height:1,background:'rgba(255,255,255,0.08)',margin:'0 4px'}}),
+      h('button',{
+        onClick:()=>mapRef.current?.flyTo({center:[-119.5383,37.8651],zoom:12,duration:1000}),
+        style:{width:36,height:36,borderRadius:10,
+          display:'flex',alignItems:'center',justifyContent:'center',color:C.cyan}},
+        h(Navigation,{size:16,strokeWidth:2}))
+    ),
+
+    // ── Bottom sheet (pin tap) ────────────────────────────────────────────────
+    selPin&&h(React.Fragment,{},
+      h('div',{onClick:closeSheet,style:{position:'absolute',inset:0,zIndex:40,
+        background:'rgba(0,0,0,0.5)',opacity:sheetVisible?1:0,transition:'opacity 0.35s ease'}}),
+      h('div',{style:{position:'absolute',bottom:90,left:0,right:0,zIndex:41,
+        background:C.bgCard,borderRadius:'24px 24px 0 0',
+        boxShadow:'0 -4px 40px rgba(0,0,0,0.6)',
+        transform:sheetVisible?'translateY(0)':'translateY(100%)',
+        transition:'transform 0.35s cubic-bezier(0.32,0.72,0,1)'}},
+        h('div',{style:{width:36,height:4,borderRadius:2,
+          background:'rgba(255,255,255,0.2)',margin:'12px auto 0'}}),
+        h('div',{style:{padding:'12px 16px 16px'}},
+          sheetPost&&h(Postcard,{post:sheetPost,compact:true,likedPosts,onLike})
+        )
+      )
+    )
+  );
+}
+
+// ── Friends page data ──────────────────────────────────────────────────────
+const POST_RELATIONS=['Hiking Buddy','Trail Partner','Summit Pal','Base Camp Crew'];
+const STORY_FRIENDS=[
+  {id:1,name:'Sarah',photo:310,avatar:42},
+  {id:2,name:'Jake',photo:311,avatar:53},
+  {id:3,name:'Mia',photo:312,avatar:64},
+  {id:4,name:'Alex',photo:313,avatar:75},
+  {id:5,name:'Taylor',photo:314,avatar:81},
+];
+
+// ── Friend Post Card (reference-style) ─────────────────────────────────────
+function FriendPostCard({post,relation,liked,onLike}){
+  const [pulse,setPulse]=S(false);
+  const handleLike=()=>{setPulse(true);setTimeout(()=>setPulse(false),220);onLike(post.id);};
+  const fmt=n=>n>=1000?`${(n/1000).toFixed(1)}K`:String(n);
+
+  return h('div',{style:{
+    background:'rgba(20,20,32,0.94)',
+    border:`1px solid rgba(255,255,255,0.07)`,
+    borderRadius:22,marginBottom:14,
+    boxShadow:'0 6px 40px rgba(0,0,0,0.5)',
+    overflow:'hidden',
+  }},
+
+    // ── Card header ──────────────────────────────────────────────────────────
+    h('div',{style:{padding:'14px 16px 0',display:'flex',alignItems:'center',gap:11}},
+      h('img',{src:pic(40,40,post.avatar),alt:'',style:{
+        width:40,height:40,borderRadius:'50%',objectFit:'cover',flexShrink:0,
+        border:'1.5px solid rgba(255,255,255,0.18)'}}),
+      h('div',{style:{flex:1,minWidth:0}},
+        h('div',{style:{display:'flex',alignItems:'center',gap:5}},
+          h('span',{style:{fontSize:15,fontWeight:700,color:C.white,fontFamily:FONT_H}},post.user),
+          // Verified badge
+          h('div',{style:{width:15,height:15,borderRadius:'50%',background:'#1D9BF0',
+            display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}},
+            h(Check,{size:8,color:'#fff',strokeWidth:3}))
+        ),
+        h('div',{style:{display:'flex',alignItems:'center',gap:4,marginTop:2,flexWrap:'wrap'}},
+          h('span',{style:{fontSize:12,color:C.textMuted,fontFamily:FONT_B}},'2h ago'),
+          h('span',{style:{color:'rgba(255,255,255,0.18)'},'aria-hidden':'true'},'·'),
+          h(MapPin,{size:10,color:C.textMuted,strokeWidth:2}),
+          h('span',{style:{fontSize:12,color:C.textMuted,fontFamily:FONT_B,
+            overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},post.location)
+        )
+      ),
+      // Relation pill
+      h('div',{style:{
+        background:'rgba(255,255,255,0.09)',border:`1px solid rgba(255,255,255,0.1)`,
+        borderRadius:20,padding:'6px 14px',flexShrink:0}},
+        h('span',{style:{fontSize:12,fontWeight:600,color:C.white,fontFamily:FONT_H}},relation)
+      )
+    ),
+
+    // ── Stacked photo layout ──────────────────────────────────────────────────
+    h('div',{style:{position:'relative',height:248,margin:'14px 14px 0'}},
+      // Secondary photo — behind, rotated clockwise at top-right
+      h('div',{style:{
+        position:'absolute',right:0,top:0,
+        width:'53%',height:'78%',
+        borderRadius:16,overflow:'hidden',zIndex:1,
+        transform:'rotate(5deg)',transformOrigin:'top right',
+        boxShadow:'0 8px 24px rgba(0,0,0,0.6)'}},
+        h('img',{src:pic(200,200,(post.photo||99)+100),alt:'',
+          style:{width:'100%',height:'100%',objectFit:'cover'}})
+      ),
+      // Main photo — front, full height, left side
+      h('div',{style:{
+        position:'absolute',left:0,top:0,bottom:0,
+        width:'73%',
+        borderRadius:16,overflow:'hidden',zIndex:2,
+        boxShadow:'0 10px 36px rgba(0,0,0,0.65)'}},
+        h('img',{src:pic(280,248,post.photo||99),alt:'',
+          style:{width:'100%',height:'100%',objectFit:'cover'}})
+      )
+    ),
+
+    // ── Caption + hike stats ─────────────────────────────────────────────────
+    h('div',{style:{padding:'14px 16px 10px'}},
+      h('p',{style:{fontSize:14,lineHeight:1.57,color:'rgba(255,255,255,0.82)',
+        fontFamily:FONT_B,margin:0}},post.caption),
+      h('div',{style:{display:'flex',alignItems:'center',gap:5,marginTop:8}},
+        h('span',{style:{fontSize:13}},'🥾'),
+        h('span',{style:{fontSize:12,color:C.textMuted,fontFamily:FONT_B}},
+          `${post.dist} · ${post.dur}`)
+      )
+    ),
+
+    // ── Action buttons ───────────────────────────────────────────────────────
+    h('div',{style:{padding:'6px 16px 16px',display:'flex',gap:8}},
+      // Like pill
+      h('button',{onClick:handleLike,style:{
+        display:'flex',alignItems:'center',gap:7,
+        background:'rgba(255,255,255,0.07)',border:`1px solid rgba(255,255,255,0.09)`,
+        borderRadius:20,padding:'8px 16px',
+        transform:pulse?'scale(1.08)':'scale(1)',transition:'transform 0.2s ease'}},
+        h(Heart,{size:16,color:liked?C.danger:'rgba(255,255,255,0.75)',
+          fill:liked?C.danger:'none',strokeWidth:2}),
+        h('span',{style:{fontSize:13,fontWeight:700,fontFamily:FONT_H,
+          color:liked?C.danger:'rgba(255,255,255,0.75)'}},fmt(post.likes+(liked?1:0)))
+      ),
+      // Comment pill
+      h('div',{style:{
+        display:'flex',alignItems:'center',gap:7,
+        background:'rgba(255,255,255,0.07)',border:`1px solid rgba(255,255,255,0.09)`,
+        borderRadius:20,padding:'8px 16px'}},
+        h(MessageCircle,{size:16,color:'rgba(255,255,255,0.75)',strokeWidth:2}),
+        h('span',{style:{fontSize:13,fontWeight:700,fontFamily:FONT_H,
+          color:'rgba(255,255,255,0.75)'}},fmt(post.comments))
+      )
+    )
+  );
+}
+
+// ── Friends Screen ─────────────────────────────────────────────────────────
+function FriendsScreen({likedPosts,onLike,onNotifications,onOpenCreate}){
+  return h('div',{style:{
+    position:'absolute',inset:0,
+    background:C.bg,
+    // Teal radial glow at top — matches reference
+    backgroundImage:'radial-gradient(ellipse 110% 46% at 50% -2%, rgba(0,145,170,0.30) 0%, transparent 68%)',
+  }},
+    h(StatusBar,{}),
+
+    // ── Top Nav bar ───────────────────────────────────────────────────────────
+    h('div',{style:{
+      position:'absolute',top:0,left:0,right:0,zIndex:20,
+      padding:'54px 16px 14px',
+      display:'flex',alignItems:'center',justifyContent:'space-between',
+    }},
+      // "Friends" label pill (glass)
+      h('div',{style:{...glassStyle,borderRadius:22,padding:'9px 22px'}},
+        h('span',{style:{fontSize:15,fontWeight:700,color:C.white,fontFamily:FONT_H}},'Friends')
+      ),
+      // Right: bell pill + create circle
+      h('div',{style:{display:'flex',alignItems:'center',gap:10}},
+        h('button',{onClick:onNotifications,style:{
+          ...glassStyle,borderRadius:22,padding:'9px 14px',
+          display:'flex',alignItems:'center',gap:7}},
+          h(Bell,{size:17,color:C.white,strokeWidth:2}),
+          h('span',{style:{fontSize:13,fontWeight:700,color:C.white,fontFamily:FONT_H}},'4')
+        ),
+        h('button',{onClick:onOpenCreate,style:{
+          ...glassStyle,width:42,height:42,borderRadius:21,
+          display:'flex',alignItems:'center',justifyContent:'center'}},
+          h(Camera,{size:18,color:C.cyan,strokeWidth:2})
+        )
+      )
+    ),
+
+    // ── Stories row ──────────────────────────────────────────────────────────
+    h('div',{style:{
+      position:'absolute',top:112,left:0,right:0,
+      padding:'0 16px 0',
+    }},
+      h('div',{style:{display:'flex',gap:10,overflowX:'auto',scrollbarWidth:'none',
+        WebkitOverflowScrolling:'touch',paddingBottom:4}},
+
+        // "Your Story" card
+        h('div',{style:{flexShrink:0,display:'flex',flexDirection:'column',
+          alignItems:'center',gap:6}},
+          h('div',{style:{
+            width:76,height:76,borderRadius:20,
+            background:C.bgCard,border:`1px solid ${C.border}`,
+            position:'relative',overflow:'hidden',flexShrink:0}},
+            h('img',{src:pic(76,76,99),alt:'',style:{
+              width:'100%',height:'100%',objectFit:'cover',opacity:0.8}}),
+            h('div',{style:{
+              position:'absolute',bottom:5,right:5,
+              width:20,height:20,borderRadius:'50%',
+              background:C.cyan,border:`2px solid ${C.bg}`,
+              display:'flex',alignItems:'center',justifyContent:'center'}},
+              h(Plus,{size:10,color:C.white,strokeWidth:3}))
+          ),
+          h('span',{style:{fontSize:10,fontWeight:500,color:C.textSecondary,
+            fontFamily:FONT_B,whiteSpace:'nowrap'}},'Your Story')
+        ),
+
+        // Friend story cards — portrait with gradient ring
+        ...STORY_FRIENDS.map(s=>
+          h('div',{key:s.id,style:{flexShrink:0,display:'flex',flexDirection:'column',
+            alignItems:'center',gap:6}},
+            // Gradient ring border wrapper
+            h('div',{style:{
+              padding:'2.5px',borderRadius:20,
+              background:'linear-gradient(145deg,#1855FF,#00CFFF)',
+              boxShadow:'0 0 14px rgba(0,140,255,0.30)'}},
+              h('div',{style:{width:98,height:132,borderRadius:18,overflow:'hidden',position:'relative'}},
+                h('img',{src:pic(98,132,s.photo),alt:'',
+                  style:{width:'100%',height:'100%',objectFit:'cover'}}),
+                // Small avatar inset — top-left
+                h('div',{style:{position:'absolute',top:7,left:7,
+                  width:24,height:24,borderRadius:'50%',overflow:'hidden',
+                  border:'1.5px solid rgba(255,255,255,0.9)'}},
+                  h('img',{src:pic(24,24,s.avatar),alt:'',
+                    style:{width:'100%',height:'100%',objectFit:'cover'}})
+                )
+              )
+            ),
+            h('span',{style:{fontSize:10,fontWeight:500,color:C.textSecondary,
+              fontFamily:FONT_B,whiteSpace:'nowrap'}},s.name)
+          )
+        )
+      )
+    ),
+
+    // ── Posts feed ────────────────────────────────────────────────────────────
+    h('div',{style:{
+      position:'absolute',top:278,bottom:90,
+      left:0,right:0,overflowY:'auto',
+      padding:'4px 14px 24px',
+    }},
+      ...POSTS.map((post,i)=>h(FriendPostCard,{
+        key:post.id,post,
+        relation:POST_RELATIONS[i%POST_RELATIONS.length],
+        liked:likedPosts.has(post.id),
+        onLike,
+      }))
+    )
+  );
+}
+
+// ── Create Screen (Publish Adventure) ─────────────────────────────────────
+const MOCK_LOCS=[
+  'Half Dome, Yosemite NP',
+  'Angels Landing, Zion NP',
+  'The Enchantments, WA',
+  'Havasupai Falls, AZ',
+  'Hurricane Ridge, Olympic NP',
+  'Grand Teton Summit, WY',
+  'Sky Pond, Rocky Mountain NP',
+  'Havasu Canyon, AZ',
+  'Mt. Whitney, CA',
+  'Appalachian Trail, NC',
+];
+const TAG_SEEDS=[42,53,64];
+
+function CreateScreen({onClose}){
+  const [caption,setCaption]=S('');
+  const [locInput,setLocInput]=S('');
+  const [selLoc,setSelLoc]=S('');
+  const [showDrop,setShowDrop]=S(false);
+  const [tagged,setTagged]=S([...TAG_SEEDS]);
+
+  const filtered=M(()=>locInput.trim().length===0?[]
+    :MOCK_LOCS.filter(l=>l.toLowerCase().includes(locInput.toLowerCase())).slice(0,5)
+  ,[locInput]);
+
+  const pickLoc=(loc)=>{setSelLoc(loc);setLocInput(loc);setShowDrop(false);};
+  const removeTag=(seed)=>setTagged(t=>t.filter(s=>s!==seed));
+
+  // Section heading style
+  const SH={fontSize:18,fontWeight:700,color:C.white,fontFamily:FONT_H,
+    letterSpacing:'-0.2px',marginBottom:12};
+  // Dark input card
+  const CARD={background:'rgba(20,20,32,0.92)',border:`1px solid rgba(255,255,255,0.07)`,borderRadius:18};
+
+  return h('div',{style:{
+    position:'absolute',inset:0,zIndex:100,
+    background:C.bg,
+    backgroundImage:'radial-gradient(ellipse 110% 44% at 50% -2%, rgba(0,145,170,0.30) 0%, transparent 66%)',
+    display:'flex',flexDirection:'column',
+  }},
+
+    // ── Scrollable body ───────────────────────────────────────────────────────
+    h('div',{style:{flex:1,overflowY:'auto',scrollbarWidth:'none'}},
+
+      // Top nav — sticky
+      h('div',{style:{
+        position:'sticky',top:0,zIndex:20,
+        padding:'54px 16px 14px',
+        display:'flex',alignItems:'center',justifyContent:'center',
+        background:'linear-gradient(to bottom,rgba(14,14,24,0.88) 65%,transparent 100%)',
+      }},
+        h('button',{onClick:onClose,style:{
+          position:'absolute',left:16,
+          ...glassStyle,width:38,height:38,borderRadius:'50%',
+          display:'flex',alignItems:'center',justifyContent:'center'}},
+          h(ChevronLeft,{size:20,color:C.white,strokeWidth:2.5})
+        ),
+        h('span',{style:{fontSize:17,fontWeight:700,color:C.white,fontFamily:FONT_H,
+          letterSpacing:'-0.2px'}},'Publish Adventure')
+      ),
+
+      // ── Photo card ──────────────────────────────────────────────────────────
+      h('div',{style:{margin:'6px 16px 0',position:'relative',borderRadius:22,
+        overflow:'hidden',height:288}},
+        h('img',{src:pic(400,288,401),alt:'',
+          style:{width:'100%',height:'100%',objectFit:'cover',display:'block'}}),
+        // Teal overlay
+        h('div',{style:{position:'absolute',inset:0,
+          background:'linear-gradient(180deg,rgba(0,140,165,0.22) 0%,transparent 55%)',
+          pointerEvents:'none'}}),
+        // X button top-left
+        h('button',{onClick:onClose,style:{
+          position:'absolute',top:10,left:10,
+          ...glassStyle,width:32,height:32,borderRadius:'50%',
+          display:'flex',alignItems:'center',justifyContent:'center'}},
+          h(X,{size:13,color:C.white,strokeWidth:2.5})
+        ),
+        // "Add +" frosted glass pill at bottom of card
+        h('div',{style:{position:'absolute',bottom:12,left:12,right:12}},
+          h('button',{style:{
+            width:'100%',
+            ...glassStyle,
+            borderRadius:24,padding:'12px 0',
+            display:'flex',alignItems:'center',justifyContent:'center',gap:8}},
+            h('span',{style:{fontSize:16,fontWeight:600,color:C.white,fontFamily:FONT_H}},'Add'),
+            h(Plus,{size:16,color:C.white,strokeWidth:2.5})
+          )
+        )
+      ),
+
+      // ── Adventure Notes ──────────────────────────────────────────────────────
+      h('div',{style:{padding:'22px 16px 0'}},
+        h('p',{style:SH},'Adventure Notes'),
+        h('div',{style:{...CARD,padding:'14px 16px',minHeight:128}},
+          h('textarea',{value:caption,onChange:e=>setCaption(e.target.value),
+            placeholder:'What made this adventure unforgettable?',
+            style:{fontSize:15,color:C.white,lineHeight:1.6,fontFamily:FONT_B,
+              minHeight:106}})
+        )
+      ),
+
+      // ── Add Location ─────────────────────────────────────────────────────────
+      h('div',{style:{padding:'22px 16px 0'}},
+        h('p',{style:SH},'Add Location'),
+        h('div',{style:{position:'relative'}},
+          // Input row
+          h('div',{style:{
+            ...CARD,
+            border:`1px solid ${selLoc?'rgba(0,207,255,0.35)':'rgba(255,255,255,0.07)'}`,
+            padding:'0 16px',height:54,
+            display:'flex',alignItems:'center',gap:12}},
+            h(MapPin,{size:18,color:selLoc?C.cyan:C.textMuted,strokeWidth:2}),
+            h('input',{
+              value:locInput,
+              onChange:e=>{setLocInput(e.target.value);setSelLoc('');setShowDrop(true);},
+              onFocus:()=>{if(locInput)setShowDrop(true);},
+              placeholder:'Search for a location…',
+              style:{flex:1,fontSize:15,fontFamily:FONT_B,color:C.white}}),
+            selLoc&&h('div',{style:{width:20,height:20,borderRadius:'50%',
+              background:'rgba(0,207,255,0.15)',border:`1px solid rgba(0,207,255,0.4)`,
+              display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}},
+              h(Check,{size:11,color:C.cyan,strokeWidth:2.5}))
+          ),
+          // Dropdown list
+          showDrop&&filtered.length>0&&h('div',{style:{
+            position:'absolute',top:60,left:0,right:0,zIndex:40,
+            background:'rgba(18,18,28,0.97)',
+            backdropFilter:'blur(24px)',
+            border:`1px solid rgba(255,255,255,0.09)`,
+            borderRadius:16,overflow:'hidden',
+            boxShadow:'0 10px 40px rgba(0,0,0,0.7)'}},
+            ...filtered.map((loc,i)=>h('button',{key:loc,
+              onClick:()=>pickLoc(loc),
+              style:{
+                width:'100%',padding:'13px 16px',
+                textAlign:'left',display:'flex',alignItems:'center',gap:10,
+                borderBottom:i<filtered.length-1?`1px solid rgba(255,255,255,0.06)`:'none',
+                background:'transparent',transition:'background 0.12s ease'}},
+              h(MapPin,{size:13,color:C.textMuted,strokeWidth:2}),
+              h('span',{style:{fontSize:14,color:C.white,fontFamily:FONT_B}},loc)
+            ))
+          )
+        )
+      ),
+
+      // ── Tag People ────────────────────────────────────────────────────────────
+      h('div',{style:{padding:'22px 16px 28px'}},
+        h('p',{style:SH},'Tag People'),
+        h('div',{style:{display:'flex',alignItems:'center',gap:12}},
+          // Add-person button
+          h('button',{style:{
+            width:52,height:52,borderRadius:'50%',flexShrink:0,
+            background:'rgba(36,36,52,0.9)',
+            border:`1px solid rgba(255,255,255,0.14)`,
+            display:'flex',alignItems:'center',justifyContent:'center'}},
+            h(User,{size:22,color:'rgba(255,255,255,0.5)'})
+          ),
+          // Tagged friend bubbles
+          ...tagged.map(seed=>h('div',{key:seed,
+            style:{position:'relative',width:52,height:52,flexShrink:0}},
+            h('img',{src:pic(52,52,seed),alt:'',
+              style:{width:52,height:52,borderRadius:'50%',objectFit:'cover',
+                border:'2px solid rgba(255,255,255,0.16)'}}),
+            h('button',{onClick:()=>removeTag(seed),style:{
+              position:'absolute',top:0,right:0,
+              width:18,height:18,borderRadius:'50%',
+              background:'rgba(24,24,38,0.95)',
+              border:`1px solid rgba(255,255,255,0.22)`,
+              display:'flex',alignItems:'center',justifyContent:'center'}},
+              h(X,{size:8,color:C.white,strokeWidth:2.5})
+            )
+          ))
+        )
+      )
+    ),
+
+    // ── Fixed Publish button ──────────────────────────────────────────────────
+    h('div',{style:{
+      flexShrink:0,
+      padding:'14px 16px 42px',
+      background:'linear-gradient(to top,#0E0E18 58%,transparent 100%)',
+    }},
+      h('button',{style:{
+        width:'100%',
+        background:'linear-gradient(135deg,#00D8FF 0%,#00BFEF 100%)',
+        borderRadius:32,padding:'18px 0',
+        fontSize:17,fontWeight:700,fontFamily:FONT_H,
+        color:'#061018',letterSpacing:'0.15px',
+        boxShadow:'0 6px 30px rgba(0,210,255,0.42)',
+      }},'Publish Adventure')
+    )
+  );
+}
+
+// ── Plan: List View ────────────────────────────────────────────────────────
+function PlanListView({onNew,onOpen}){
+  return h('div',{style:{position:'absolute',inset:0,background:C.bg}},
+    h('div',{style:{
+      position:'absolute',top:0,left:0,right:0,height:300,
+      background:'radial-gradient(ellipse 100% 55% at 50% 0%,rgba(0,180,220,0.18) 0%,transparent 70%)',
+      pointerEvents:'none',zIndex:0,
+    }}),
+    h(StatusBar,{}),
+    h('div',{style:{
+      position:'absolute',top:0,left:0,right:0,bottom:76,
+      overflowY:'auto',zIndex:5,
+      paddingTop:58,paddingBottom:20,
+    }},
+      // Header
+      h('div',{style:{padding:'14px 20px 16px'}},
+        h('h1',{style:{fontSize:30,fontWeight:900,color:C.white,fontFamily:FONT_H,letterSpacing:'-0.5px'}},'Plan'),
+        h('p',{style:{fontSize:13,color:C.textMuted,marginTop:3,fontFamily:FONT_B}},'Upcoming adventures with your crew')
+      ),
+      // "Plan New Adventure" CTA
+      h('div',{style:{padding:'0 16px 24px'}},
+        h('button',{onClick:onNew,style:{
+          width:'100%',
+          background:'linear-gradient(135deg,#00D8FF 0%,#00BFEF 100%)',
+          borderRadius:28,padding:'15px 20px',
+          fontSize:16,fontWeight:800,color:'#061018',fontFamily:FONT_H,
+          boxShadow:'0 4px 22px rgba(0,207,255,0.38)',
+          display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+        }},
+          h(CalendarDays,{size:18,color:'#061018',strokeWidth:2.5}),
+          'Plan New Adventure'
+        )
+      ),
+      // Adventure cards
+      ...PLAN_ADVENTURES.map(adv=>
+        h('div',{key:adv.id,onClick:()=>onOpen(adv.id),
+          style:{
+            margin:'0 16px 16px',borderRadius:22,cursor:'pointer',
+            background:'rgba(28,28,40,0.92)',
+            border:`1px solid rgba(255,255,255,0.07)`,
+            overflow:'hidden',
+            boxShadow:'0 4px 24px rgba(0,0,0,0.5)',
+          }
+        },
+          // Photo strip
+          h('div',{style:{height:148,position:'relative',overflow:'hidden'}},
+            h('img',{src:pic(390,148,adv.photo),alt:adv.name,style:{
+              width:'100%',height:'100%',objectFit:'cover',display:'block'}}),
+            h('div',{style:{
+              position:'absolute',inset:0,
+              background:'linear-gradient(to bottom,rgba(0,0,0,0.05) 0%,rgba(0,0,0,0.6) 100%)',
+            }}),
+            // "X going" badge
+            h('div',{style:{
+              position:'absolute',top:10,right:10,
+              ...glassStyle,borderRadius:20,padding:'5px 11px',
+              display:'flex',alignItems:'center',gap:5,
+            }},
+              h('span',{style:{fontSize:11,fontWeight:700,color:C.white,fontFamily:FONT_B}},'👤 '+adv.going.length+' going')
+            )
+          ),
+          // Card body
+          h('div',{style:{padding:'14px 16px 15px'}},
+            h('h3',{style:{fontSize:18,fontWeight:800,color:C.white,fontFamily:FONT_H,letterSpacing:'-0.2px',lineHeight:1.2}},adv.name),
+            h('p',{style:{fontSize:13,color:C.cyan,fontWeight:600,fontFamily:FONT_B,marginTop:3}},adv.trail),
+            h('div',{style:{display:'flex',alignItems:'center',gap:6,marginTop:8}},
+              h(CalendarDays,{size:13,color:C.textMuted,strokeWidth:2}),
+              h('span',{style:{fontSize:12,color:C.textSecondary,fontFamily:FONT_B}},adv.date+' · '+adv.time)
+            ),
+            h('div',{style:{height:1,background:C.border,margin:'12px 0'}}),
+            h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},
+              h('div',{style:{display:'flex',alignItems:'center',gap:5}},
+                h(ExternalLink,{size:12,color:C.cyan,strokeWidth:2.5}),
+                h('span',{style:{fontSize:12,fontWeight:700,color:C.cyan,fontFamily:FONT_B}},
+                  'Open in AllTrails')
+              ),
+              h('span',{style:{fontSize:11,color:C.textMuted,fontFamily:FONT_B}},'by '+adv.creator)
+            )
+          )
+        )
+      )
+    )
+  );
+}
+
+// ── Plan: New Adventure Form ───────────────────────────────────────────────
+function PlanNewView({onBack}){
+  const [advName,setAdvName]=S('');
+  const [trail,setTrail]=S('');
+  const [link,setLink]=S('');
+  const [notes,setNotes]=S('');
+  const [vis,setVis]=S('friends');
+  const [tagged,setTagged]=S([42,53,64]);
+  const removeTag=(seed)=>setTagged(t=>t.filter(s=>s!==seed));
+
+  const SH={fontSize:17,fontWeight:700,color:C.white,fontFamily:FONT_H,letterSpacing:'-0.2px',marginBottom:10};
+  const IC={background:'rgba(20,20,32,0.92)',border:`1px solid rgba(255,255,255,0.07)`,borderRadius:18};
+  const InputRow=({icon,placeholder,value,onChange,type='text'})=>
+    h('div',{style:{...IC,padding:'0 16px',height:54,display:'flex',alignItems:'center',gap:12}},
+      icon,
+      h('input',{type,value,onChange:e=>onChange(e.target.value),placeholder,
+        style:{flex:1,fontSize:15,fontFamily:FONT_B,color:C.white}})
+    );
+
+  return h('div',{style:{
+    position:'absolute',inset:0,zIndex:100,
+    background:C.bg,
+    backgroundImage:'radial-gradient(ellipse 110% 44% at 50% -2%,rgba(0,145,170,0.30) 0%,transparent 66%)',
+    display:'flex',flexDirection:'column',
+  }},
+    h('div',{style:{flex:1,overflowY:'auto',scrollbarWidth:'none'}},
+      // Sticky nav
+      h('div',{style:{
+        position:'sticky',top:0,zIndex:20,
+        padding:'54px 16px 14px',
+        display:'flex',alignItems:'center',justifyContent:'center',
+        background:'linear-gradient(to bottom,rgba(14,14,24,0.90) 65%,transparent 100%)',
+      }},
+        h('button',{onClick:onBack,style:{
+          position:'absolute',left:16,...glassStyle,
+          width:38,height:38,borderRadius:'50%',
+          display:'flex',alignItems:'center',justifyContent:'center'}},
+          h(ChevronLeft,{size:20,color:C.white,strokeWidth:2.5})
+        ),
+        h('span',{style:{fontSize:17,fontWeight:700,color:C.white,fontFamily:FONT_H,letterSpacing:'-0.2px'}},
+          'Plan Adventure')
+      ),
+      // Cover photo card (same pattern as CreateScreen)
+      h('div',{style:{margin:'6px 16px 0',position:'relative',borderRadius:22,overflow:'hidden',height:220}},
+        h('img',{src:pic(400,220,403),alt:'',style:{width:'100%',height:'100%',objectFit:'cover',display:'block'}}),
+        h('div',{style:{position:'absolute',inset:0,
+          background:'linear-gradient(180deg,rgba(0,140,165,0.22) 0%,transparent 55%)',pointerEvents:'none'}}),
+        h('button',{style:{position:'absolute',top:10,left:10,...glassStyle,
+          width:32,height:32,borderRadius:'50%',
+          display:'flex',alignItems:'center',justifyContent:'center'}},
+          h(X,{size:13,color:C.white,strokeWidth:2.5})
+        ),
+        h('div',{style:{position:'absolute',bottom:12,left:12,right:12}},
+          h('button',{style:{width:'100%',...glassStyle,borderRadius:24,padding:'12px 0',
+            display:'flex',alignItems:'center',justifyContent:'center',gap:8}},
+            h('span',{style:{fontSize:16,fontWeight:600,color:C.white,fontFamily:FONT_H}},'Add'),
+            h(Plus,{size:16,color:C.white,strokeWidth:2.5})
+          )
+        )
+      ),
+      // Adventure Name
+      h('div',{style:{padding:'22px 16px 0'}},
+        h('p',{style:SH},'Adventure Name'),
+        h(InputRow,{icon:null,placeholder:'e.g. Saturday Hike',value:advName,onChange:setAdvName})
+      ),
+      // Trail Name
+      h('div',{style:{padding:'16px 16px 0'}},
+        h('p',{style:SH},'Trail Name'),
+        h(InputRow,{
+          icon:h(MapPin,{size:18,color:C.textMuted,strokeWidth:2}),
+          placeholder:'e.g. Angels Landing',value:trail,onChange:setTrail
+        })
+      ),
+      // AllTrails Link
+      h('div',{style:{padding:'16px 16px 0'}},
+        h('p',{style:SH},'AllTrails Link'),
+        h(InputRow,{
+          icon:h(ExternalLink,{size:18,color:C.textMuted,strokeWidth:2}),
+          placeholder:'https://alltrails.com/trail/…',
+          value:link,onChange:setLink,type:'url'
+        })
+      ),
+      // Date & Time
+      h('div',{style:{padding:'16px 16px 0'}},
+        h('p',{style:SH},'Date & Time'),
+        h('div',{style:{...IC,padding:'0 16px',height:54,display:'flex',alignItems:'center',gap:12}},
+          h(CalendarDays,{size:18,color:C.textMuted,strokeWidth:2}),
+          h('input',{type:'datetime-local',
+            style:{flex:1,fontSize:15,fontFamily:FONT_B,color:'rgba(255,255,255,0.55)',colorScheme:'dark'}})
+        )
+      ),
+      // Description / Notes
+      h('div',{style:{padding:'16px 16px 0'}},
+        h('p',{style:SH},'Description'),
+        h('div',{style:{...IC,padding:'14px 16px',minHeight:108}},
+          h('textarea',{value:notes,onChange:e=>setNotes(e.target.value),
+            placeholder:'Tell your crew what to expect — gear, meeting point, trail conditions…',
+            style:{fontSize:15,color:C.white,lineHeight:1.6,fontFamily:FONT_B,minHeight:88}})
+        )
+      ),
+      // Invite Friends (Tag People pattern)
+      h('div',{style:{padding:'16px 16px 0'}},
+        h('p',{style:SH},'Invite Friends'),
+        h('div',{style:{display:'flex',alignItems:'center',gap:12}},
+          h('button',{style:{
+            width:52,height:52,borderRadius:'50%',flexShrink:0,
+            background:'rgba(36,36,52,0.9)',border:`1px solid rgba(255,255,255,0.14)`,
+            display:'flex',alignItems:'center',justifyContent:'center'}},
+            h(User,{size:22,color:'rgba(255,255,255,0.5)'})
+          ),
+          ...tagged.map(seed=>h('div',{key:seed,style:{position:'relative',width:52,height:52,flexShrink:0}},
+            h('img',{src:pic(52,52,seed),alt:'',style:{
+              width:52,height:52,borderRadius:'50%',objectFit:'cover',
+              border:'2px solid rgba(255,255,255,0.16)'}}),
+            h('button',{onClick:()=>removeTag(seed),style:{
+              position:'absolute',top:0,right:0,width:18,height:18,borderRadius:'50%',
+              background:'rgba(24,24,38,0.95)',border:`1px solid rgba(255,255,255,0.22)`,
+              display:'flex',alignItems:'center',justifyContent:'center'}},
+              h(X,{size:8,color:C.white,strokeWidth:2.5})
+            )
+          ))
+        )
+      ),
+      // Visibility
+      h('div',{style:{padding:'16px 16px 32px'}},
+        h('p',{style:SH},'Visibility'),
+        h('div',{style:{display:'flex',gap:10}},
+          ...[{k:'friends',label:'Friends Only'},{k:'public',label:'Public to All'}].map(opt=>
+            h('button',{key:opt.k,onClick:()=>setVis(opt.k),style:{
+              flex:1,borderRadius:22,padding:'12px 0',
+              background:vis===opt.k?'rgba(0,207,255,0.14)':'rgba(28,28,40,0.9)',
+              border:`1.5px solid ${vis===opt.k?C.cyan:'rgba(255,255,255,0.08)'}`,
+              fontSize:14,fontWeight:600,fontFamily:FONT_B,
+              color:vis===opt.k?C.cyan:C.textMuted,
+              transition:'all 0.18s ease',
+            }},opt.label)
+          )
+        )
+      )
+    ),
+    // Fixed Create button
+    h('div',{style:{
+      flexShrink:0,padding:'14px 16px 84px',
+      background:'linear-gradient(to top,#0E0E18 58%,transparent 100%)',
+    }},
+      h('button',{style:{
+        width:'100%',
+        background:'linear-gradient(135deg,#00D8FF 0%,#00BFEF 100%)',
+        borderRadius:32,padding:'18px 0',
+        fontSize:17,fontWeight:700,fontFamily:FONT_H,
+        color:'#061018',letterSpacing:'0.15px',
+        boxShadow:'0 6px 30px rgba(0,210,255,0.42)',
+      }},'Create Adventure')
+    )
+  );
+}
+
+// ── Plan: Adventure Detail ─────────────────────────────────────────────────
+function PlanDetailView({adventure:adv,onBack}){
+  const [rsvp,setRsvp]=S('going');
+  const [comment,setComment]=S('');
+
+  // Small uppercase section label
+  const SL=(label)=>h('p',{style:{
+    fontSize:11,fontWeight:700,color:C.textMuted,letterSpacing:'0.8px',
+    textTransform:'uppercase',marginBottom:12,fontFamily:FONT_B,
+  }},label);
+
+  return h('div',{style:{
+    position:'absolute',inset:0,background:C.bg,
+    display:'flex',flexDirection:'column',
+  }},
+    h('div',{style:{
+      position:'absolute',top:0,left:0,right:0,height:280,
+      background:'radial-gradient(ellipse 100% 55% at 50% 0%,rgba(0,180,220,0.18) 0%,transparent 70%)',
+      pointerEvents:'none',zIndex:0,
+    }}),
+    h(StatusBar,{}),
+
+    // Scrollable body
+    h('div',{style:{flex:1,overflowY:'auto',position:'relative',zIndex:5,paddingBottom:24}},
+      // Sticky nav
+      h('div',{style:{
+        position:'sticky',top:0,zIndex:20,
+        padding:'54px 16px 12px',
+        display:'flex',alignItems:'center',
+        background:'linear-gradient(to bottom,rgba(14,14,24,0.96) 70%,transparent 100%)',
+      }},
+        h('button',{onClick:onBack,style:{
+          ...glassStyle,width:38,height:38,borderRadius:'50%',flexShrink:0,
+          display:'flex',alignItems:'center',justifyContent:'center'}},
+          h(ChevronLeft,{size:20,color:C.white,strokeWidth:2.5})
+        ),
+        h('div',{style:{flex:1,textAlign:'center'}},
+          h('span',{style:{fontSize:16,fontWeight:700,color:C.white,fontFamily:FONT_H,letterSpacing:'-0.2px'}},adv.name)
+        ),
+        h('div',{style:{width:38,flexShrink:0}}) // balance spacer
+      ),
+
+      // Name + trail
+      h('div',{style:{padding:'4px 20px 0'}},
+        h('h1',{style:{fontSize:26,fontWeight:900,color:C.white,fontFamily:FONT_H,letterSpacing:'-0.4px',lineHeight:1.15}},adv.name),
+        h('p',{style:{fontSize:14,color:C.cyan,fontWeight:600,fontFamily:FONT_B,marginTop:4}},adv.trail)
+      ),
+
+      // Cover photo
+      h('div',{style:{margin:'14px 20px 0',borderRadius:22,overflow:'hidden',height:204,position:'relative'}},
+        h('img',{src:pic(390,204,adv.photo),alt:adv.name,
+          style:{width:'100%',height:'100%',objectFit:'cover',display:'block'}}),
+        h('div',{style:{position:'absolute',inset:0,
+          background:'linear-gradient(to bottom,transparent 48%,rgba(0,0,0,0.48) 100%)'}})
+      ),
+
+      // Date/time glass chip
+      h('div',{style:{
+        margin:'12px 20px 0',...glassStyle,
+        borderRadius:14,padding:'11px 16px',
+        display:'flex',alignItems:'center',gap:10,
+      }},
+        h(CalendarDays,{size:16,color:C.cyan,strokeWidth:2}),
+        h('span',{style:{fontSize:14,fontWeight:600,color:C.white,fontFamily:FONT_B}},
+          adv.date+' · '+adv.time)
+      ),
+
+      // HOST
+      h('div',{style:{padding:'20px 20px 0'}},
+        SL('Host'),
+        h('div',{style:{display:'flex',alignItems:'center',gap:14}},
+          h('img',{src:pic(50,50,adv.creatorAvatar),alt:adv.creator,style:{
+            width:50,height:50,borderRadius:'50%',objectFit:'cover',border:`2px solid ${C.cyan}`,
+          }}),
+          h('p',{style:{fontSize:14,fontWeight:700,color:C.white,fontFamily:FONT_B}},adv.creator)
+        )
+      ),
+      h('div',{style:{height:1,background:C.border,margin:'20px 20px 0'}}),
+
+      // GOING
+      h('div',{style:{padding:'18px 20px 0'}},
+        SL('Going · '+adv.going.length),
+        h('div',{style:{display:'flex',alignItems:'center'}},
+          ...adv.going.slice(0,5).map((av,i)=>h('div',{key:i,style:{
+            width:46,height:46,borderRadius:'50%',overflow:'hidden',
+            border:`2.5px solid ${C.bg}`,
+            marginLeft:i>0?-14:0,
+            position:'relative',zIndex:10-i,
+          }},
+            h('img',{src:pic(46,46,av),alt:'',style:{width:'100%',height:'100%',objectFit:'cover'}})
+          )),
+          adv.going.length>5&&h('div',{style:{
+            width:46,height:46,borderRadius:'50%',
+            background:C.bgElevated,border:`2.5px solid ${C.bg}`,
+            display:'flex',alignItems:'center',justifyContent:'center',
+            marginLeft:-14,zIndex:1,
+          }},
+            h('span',{style:{fontSize:11,fontWeight:700,color:C.textSecondary}},'+'+(adv.going.length-5))
+          )
+        )
+      ),
+      h('div',{style:{height:1,background:C.border,margin:'20px 20px 0'}}),
+
+      // DESCRIPTION
+      h('div',{style:{padding:'18px 20px 0'}},
+        SL('Description'),
+        h('div',{style:{
+          background:'rgba(20,20,32,0.92)',border:`1px solid rgba(255,255,255,0.07)`,
+          borderRadius:16,padding:'14px 16px',
+        }},
+          h('p',{style:{fontSize:14,color:C.textSecondary,lineHeight:1.65,fontFamily:FONT_B}},adv.description)
+        )
+      ),
+      h('div',{style:{height:1,background:C.border,margin:'20px 20px 0'}}),
+
+      // TRAIL
+      h('div',{style:{padding:'18px 20px 0'}},
+        SL('🥾 Trail'),
+        h('p',{style:{fontSize:16,fontWeight:700,color:C.white,fontFamily:FONT_H,marginBottom:10}},adv.trail),
+        h('div',{style:{display:'flex',alignItems:'center',gap:6}},
+          h(ExternalLink,{size:13,color:C.cyan,strokeWidth:2.5}),
+          h('span',{style:{fontSize:14,fontWeight:700,color:C.cyan,fontFamily:FONT_B}},'Open in AllTrails')
+        )
+      ),
+      h('div',{style:{height:1,background:C.border,margin:'20px 20px 0'}}),
+
+      // COMMENTS
+      h('div',{style:{padding:'18px 20px 0'}},
+        SL('Comments'),
+        h('div',{style:{display:'flex',flexDirection:'column',gap:16}},
+          ...PLAN_COMMENTS.map(c=>h('div',{key:c.id,style:{display:'flex',gap:10,alignItems:'flex-start'}},
+            h('img',{src:pic(36,36,c.avatar),alt:'',style:{
+              width:36,height:36,borderRadius:'50%',objectFit:'cover',
+              border:`1.5px solid ${C.border}`,flexShrink:0,
+            }}),
+            h('div',{style:{flex:1}},
+              h('div',{style:{display:'flex',alignItems:'baseline',gap:7,marginBottom:4}},
+                h('span',{style:{fontSize:13,fontWeight:700,color:C.white,fontFamily:FONT_B}},c.name),
+                h('span',{style:{fontSize:11,color:C.textMuted,fontFamily:FONT_B}},c.time)
+              ),
+              h('p',{style:{fontSize:13,color:C.textSecondary,lineHeight:1.5,fontFamily:FONT_B}},c.text)
+            )
+          )),
+          // Comment input
+          h('div',{style:{
+            display:'flex',gap:8,alignItems:'center',marginTop:4,
+            background:'rgba(20,20,32,0.92)',border:`1px solid rgba(255,255,255,0.07)`,
+            borderRadius:24,padding:'10px 10px 10px 16px',
+          }},
+            h('input',{value:comment,onChange:e=>setComment(e.target.value),
+              placeholder:'Add a comment…',
+              style:{flex:1,fontSize:14,fontFamily:FONT_B,color:C.white}}),
+            h('button',{style:{
+              width:34,height:34,borderRadius:'50%',flexShrink:0,
+              background:comment?'rgba(0,207,255,0.18)':'transparent',
+              display:'flex',alignItems:'center',justifyContent:'center',
+              transition:'background 0.15s ease',
+            }},
+              h(Send,{size:14,color:comment?C.cyan:'rgba(255,255,255,0.28)',strokeWidth:2,
+                style:{transform:'translateX(1px)'}})
+            )
+          )
+        )
+      )
+    ),
+
+    // RSVP buttons — fixed at bottom (above floating BottomNav)
+    h('div',{style:{
+      flexShrink:0,
+      padding:'12px 16px 84px',
+      background:'linear-gradient(to top,rgba(14,14,24,1) 54%,rgba(14,14,24,0) 100%)',
+      position:'relative',zIndex:10,
+    }},
+      h('div',{style:{display:'flex',gap:10}},
+        h('button',{onClick:()=>setRsvp('going'),style:{
+          flex:1,borderRadius:22,padding:'13px 0',
+          background:rsvp==='going'?'linear-gradient(135deg,#00D8FF,#00BFEF)':'rgba(28,28,40,0.9)',
+          border:`1.5px solid ${rsvp==='going'?'transparent':'rgba(255,255,255,0.10)'}`,
+          fontSize:14,fontWeight:700,color:rsvp==='going'?'#061018':C.textMuted,fontFamily:FONT_H,
+          boxShadow:rsvp==='going'?'0 4px 16px rgba(0,207,255,0.35)':'none',
+          transition:'all 0.18s ease',
+        }},'Going'),
+        h('button',{onClick:()=>setRsvp('maybe'),style:{
+          flex:1,borderRadius:22,padding:'13px 0',
+          background:rsvp==='maybe'?'rgba(0,207,255,0.12)':'rgba(28,28,40,0.9)',
+          border:`1.5px solid ${rsvp==='maybe'?C.cyan:'rgba(255,255,255,0.10)'}`,
+          fontSize:14,fontWeight:700,color:rsvp==='maybe'?C.cyan:C.textMuted,fontFamily:FONT_H,
+          transition:'all 0.18s ease',
+        }},'Maybe'),
+        h('button',{onClick:()=>setRsvp('cant'),style:{
+          flex:1,borderRadius:22,padding:'13px 0',
+          background:rsvp==='cant'?'rgba(255,92,92,0.10)':'rgba(28,28,40,0.9)',
+          border:`1.5px solid ${rsvp==='cant'?C.danger:'rgba(255,255,255,0.10)'}`,
+          fontSize:14,fontWeight:700,color:rsvp==='cant'?C.danger:C.textMuted,fontFamily:FONT_H,
+          transition:'all 0.18s ease',
+        }},"Can't Go")
+      )
+    )
+  );
+}
+
+// ── Plan: Root controller ─────────────────────────────────────────────────
+function PlanScreen(){
+  const [view,setView]=S('list'); // 'list' | 'new' | 'detail'
+  const [selId,setSelId]=S(null);
+  const openDetail=CB((id)=>{setSelId(id);setView('detail');},[]);
+  const openNew=CB(()=>setView('new'),[]);
+  const goBack=CB(()=>setView('list'),[]);
+  if(view==='new') return h(PlanNewView,{onBack:goBack});
+  if(view==='detail'){
+    const adv=PLAN_ADVENTURES.find(a=>a.id===selId);
+    return h(PlanDetailView,{adventure:adv,onBack:goBack});
+  }
+  return h(PlanListView,{onNew:openNew,onOpen:openDetail});
+}
+
+// ── Profile Screen ─────────────────────────────────────────────────────────
+function ProfileScreen({onPremium,onOpenCreate}){
+  const posts=MY_ADVENTURES;
+  const N=posts.length;
+  const CARD_H=222;
+  const PEEK_H=56;
+  const stackH=CARD_H+PEEK_H*(N-1);
+
+  return h('div',{style:{position:'absolute',inset:0,background:C.bg}},
+
+    /* ── Teal radial glow (same language as Friends/Create pages) ── */
+    h('div',{style:{
+      position:'absolute',top:0,left:0,right:0,height:360,
+      background:'radial-gradient(ellipse 100% 65% at 50% 0%,rgba(0,180,220,0.20) 0%,transparent 70%)',
+      pointerEvents:'none',zIndex:0,
+    }}),
+
+    h(StatusBar,{}),
+
+    /* ── Top nav: pencil (left) + settings (right) ── */
+    h('div',{style:{
+      position:'absolute',top:58,left:16,right:16,
+      display:'flex',justifyContent:'space-between',alignItems:'center',
+      zIndex:30,
+    }},
+      h('button',{style:{
+        width:42,height:42,borderRadius:21,...glassStyle,
+        display:'flex',alignItems:'center',justifyContent:'center',
+        boxShadow:'0 2px 16px rgba(0,0,0,0.35)',
+      }},h(Pencil,{size:16,color:C.white,strokeWidth:1.8})),
+      h('button',{style:{
+        width:42,height:42,borderRadius:21,...glassStyle,
+        display:'flex',alignItems:'center',justifyContent:'center',
+        boxShadow:'0 2px 16px rgba(0,0,0,0.35)',
+      }},h(Settings2,{size:17,color:C.white,strokeWidth:1.8}))
+    ),
+
+    /* ── Scrollable body ── */
+    h('div',{style:{
+      position:'absolute',top:0,left:0,right:0,bottom:0,
+      overflowY:'auto',zIndex:5,
+      paddingTop:112,paddingBottom:170,
+    }},
+
+      /* Profile header */
+      h('div',{style:{padding:'12px 20px 22px'}},
+        h('div',{style:{display:'flex',alignItems:'center',gap:18}},
+          /* Avatar */
+          h('img',{src:pic(88,88,99),alt:'avatar',style:{
+            width:88,height:88,borderRadius:'50%',objectFit:'cover',flexShrink:0,
+            border:`3px solid ${C.cyan}`,
+            boxShadow:`0 0 0 4px rgba(0,207,255,0.15),0 6px 24px rgba(0,0,0,0.55)`,
+          }}),
+          /* Name + handle + stats */
+          h('div',{style:{flex:1}},
+            h('p',{style:{fontSize:12,color:C.textMuted,fontFamily:FONT_B,fontWeight:500,marginBottom:3,letterSpacing:'0.1px'}},'@jackmcandrew'),
+            h('h2',{style:{fontSize:21,fontWeight:900,color:C.white,fontFamily:FONT_H,letterSpacing:'-0.3px',lineHeight:1.15}},'Jack McAndrew'),
+            /* Stats row */
+            h('div',{style:{display:'flex',alignItems:'flex-start',gap:18,marginTop:10}},
+              h('div',{},
+                h('div',{style:{fontSize:22,fontWeight:900,color:C.white,fontFamily:FONT_H,lineHeight:1}},'134'),
+                h('div',{style:{fontSize:11,color:C.textMuted,fontFamily:FONT_B,marginTop:3,fontWeight:500}},'Friends')
+              ),
+              h('div',{style:{width:1,height:32,background:C.border,marginTop:2}}),
+              h('div',{},
+                h('div',{style:{fontSize:22,fontWeight:900,color:C.white,fontFamily:FONT_H,lineHeight:1}},'47'),
+                h('div',{style:{fontSize:11,color:C.textMuted,fontFamily:FONT_B,marginTop:3,fontWeight:500}},'Adventures')
+              )
+            )
+          )
+        )
+      ),
+
+      /* Section heading */
+      h('div',{style:{padding:'0 20px 14px',display:'flex',alignItems:'center',justifyContent:'space-between'}},
+        h('h3',{style:{fontSize:15,fontWeight:800,color:C.white,fontFamily:FONT_H,letterSpacing:'-0.2px'}},'My Adventures'),
+        h('span',{style:{fontSize:12,color:C.cyan,fontWeight:600,fontFamily:FONT_B}},'See all')
+      ),
+
+      /* ── Stacked deck ── */
+      h('div',{style:{position:'relative',height:stackH,margin:'0 16px'}},
+        /* Render back-to-front so highest revIdx (front card) is last in DOM → naturally on top */
+        ...[...posts].reverse().map((post,revIdx)=>{
+          const isFront   = revIdx === N-1;
+          const fromFront = N-1-revIdx;          // 0 = front, N-1 = back
+          const scaleVal  = 1 - fromFront*0.045; // 0.865, 0.91, 0.955, 1.0
+          const topVal    = revIdx * PEEK_H;
+          const zIdx      = revIdx + 1;
+          // Darker overlay on cards further back for perceived depth
+          const overlayAlpha = 0.65 - revIdx * 0.18; // 0.65 → 0.47 → 0.29 → 0.11
+
+          return h('div',{
+            key:post.id,
+            style:{
+              position:'absolute',
+              top:topVal,left:0,right:0,
+              height:CARD_H,
+              borderRadius:22,
+              overflow:'hidden',
+              zIndex:zIdx,
+              transform:`scale(${scaleVal})`,
+              transformOrigin:'center top',
+              cursor:'pointer',
+              boxShadow:isFront
+                ?'0 14px 48px rgba(0,0,0,0.70),0 4px 16px rgba(0,0,0,0.4)'
+                :'0 4px 18px rgba(0,0,0,0.45)',
+              transition:'transform 0.22s ease,box-shadow 0.22s ease',
+            }
+          },
+            /* Photo */
+            h('img',{src:pic(380,CARD_H,post.photo),alt:post.title,style:{
+              width:'100%',height:'100%',objectFit:'cover',display:'block',
+            }}),
+            /* Depth overlay — darker for cards further back */
+            h('div',{style:{
+              position:'absolute',inset:0,
+              background:`rgba(0,0,0,${overlayAlpha})`,
+            }}),
+            /* Bottom gradient on front card for text legibility */
+            isFront&&h('div',{style:{
+              position:'absolute',inset:0,
+              background:'linear-gradient(to bottom,transparent 30%,rgba(0,0,0,0.78) 100%)',
+            }}),
+            /* Small avatar top-left */
+            h('img',{src:pic(34,34,post.avatar),alt:'',style:{
+              position:'absolute',top:12,left:12,
+              width:34,height:34,borderRadius:'50%',objectFit:'cover',
+              border:'2px solid rgba(255,255,255,0.65)',
+              boxShadow:'0 2px 8px rgba(0,0,0,0.5)',
+            }}),
+            /* Title overlay */
+            h('div',{style:{
+              position:'absolute',
+              bottom:isFront?16:10,
+              left:14,right:14,
+            }},
+              h('p',{style:{
+                fontSize:isFront?17:14,
+                fontWeight:700,
+                color:C.white,
+                fontFamily:FONT_H,
+                lineHeight:1.2,
+                letterSpacing:'-0.2px',
+                textShadow:'0 1px 6px rgba(0,0,0,0.6)',
+              }},post.title),
+              /* Stats row on the front card only */
+              isFront&&h('div',{style:{
+                display:'flex',alignItems:'center',gap:10,marginTop:5,
+              }},
+                h('span',{style:{fontSize:11,color:'rgba(255,255,255,0.78)',fontFamily:FONT_B}},`🥾 ${post.dist}`),
+                h('span',{style:{color:'rgba(255,255,255,0.32)',fontSize:11}},'·'),
+                h('span',{style:{fontSize:11,color:'rgba(255,255,255,0.78)',fontFamily:FONT_B}},post.elev),
+                h('span',{style:{color:'rgba(255,255,255,0.32)',fontSize:11}},'·'),
+                h('span',{style:{fontSize:11,color:'rgba(255,255,255,0.78)',fontFamily:FONT_B}},post.dur)
+              )
+            )
+          );
+        })
+      )
+    ),
+
+    /* ── "Add Adventure" button — floating above bottom nav ── */
+    h('div',{style:{
+      position:'absolute',bottom:84,left:16,right:16,
+      zIndex:20,
+    }},
+      h('button',{
+        onClick:onOpenCreate,
+        style:{
+          width:'100%',
+          background:'linear-gradient(135deg,#00D8FF 0%,#00BFEF 100%)',
+          borderRadius:32,
+          padding:'15px 20px',
+          fontSize:16,fontWeight:800,
+          color:'#061018',
+          fontFamily:FONT_H,
+          boxShadow:'0 4px 22px rgba(0,207,255,0.40)',
+          display:'flex',alignItems:'center',justifyContent:'center',
+          gap:8,
+        }
+      },
+        h(Plus,{size:18,color:'#061018',strokeWidth:2.8}),
+        'Add Adventure'
+      )
+    )
+  );
+}
+
+// ── Premium Screen ─────────────────────────────────────────────────────────
+function PremiumScreen({onClose}){
+  const [pricing,setPricing]=S('annual');
+  return h('div',{style:{position:'absolute',inset:0,zIndex:200,
+    background:'linear-gradient(180deg,#0A0E18 0%,#080C12 100%)',overflowY:'auto'}},
+    h('button',{onClick:onClose,style:{position:'absolute',top:58,left:20,zIndex:10,
+      width:34,height:34,borderRadius:'50%',background:C.bgCard,
+      display:'flex',alignItems:'center',justifyContent:'center'}},
+      h(X,{size:16,color:C.white})),
+    h('div',{style:{padding:'54px 24px 32px',textAlign:'center'}},
+      h('div',{style:{marginTop:12,width:64,height:64,borderRadius:20,
+        background:CYAN_GRAD,margin:'12px auto 0',
+        display:'flex',alignItems:'center',justifyContent:'center',boxShadow:sCyan}},
+        h(Crown,{size:32,color:'rgba(255,255,255,0.95)',strokeWidth:1.5})),
+      h('h1',{style:{fontSize:34,fontWeight:900,color:C.white,marginTop:16,letterSpacing:'-0.8px',fontFamily:FONT_H}},
+        'Mout Premium'),
+      h('p',{style:{fontSize:15,color:C.textSecondary,marginTop:6}},'The complete outdoor life'),
+      // Pricing toggle
+      h('div',{style:{background:C.bgCard,borderRadius:24,padding:4,
+        display:'inline-flex',marginTop:28,border:`1px solid ${C.border}`}},
+        h('button',{onClick:()=>setPricing('monthly'),style:{borderRadius:20,padding:'9px 22px',
+          fontSize:13,fontWeight:600,
+          background:pricing==='monthly'?C.bgElevated:'transparent',
+          color:pricing==='monthly'?C.white:C.textMuted,
+          transition:'all 0.2s ease'}},'Monthly'),
+        h('button',{onClick:()=>setPricing('annual'),style:{borderRadius:20,padding:'9px 16px',
+          fontSize:13,fontWeight:600,
+          background:pricing==='annual'?C.bgElevated:'transparent',
+          color:pricing==='annual'?C.white:C.textMuted,
+          transition:'all 0.2s ease',display:'flex',alignItems:'center',gap:8}},
+          'Annual',
+          h('span',{style:{background:CYAN_GRAD,color:C.white,borderRadius:10,
+            padding:'2px 8px',fontSize:10,fontWeight:800}},'Save 50%')
+        )
+      ),
+      h('div',{style:{margin:'24px 0 4px'}},
+        h('span',{style:{fontSize:52,fontWeight:900,color:C.white,letterSpacing:'-1px'}},
+          pricing==='annual'?'$4.99':'$9.99'),
+        h('span',{style:{fontSize:16,color:C.textMuted}},
+          '/'+(pricing==='annual'?'mo':'month'))
+      ),
+      pricing==='annual'&&h('p',{style:{fontSize:12,color:C.textMuted}},'Billed $59.99/year')
+    ),
+    // Benefits
+    h('div',{style:{margin:'0 16px',background:C.bgCard,borderRadius:20,
+      border:`1px solid ${C.border}`}},
+      ...BENEFITS.map((b,i)=>h('div',{key:i,style:{
+        display:'flex',alignItems:'flex-start',gap:14,padding:'14px 20px',
+        borderBottom:i<BENEFITS.length-1?`1px solid ${C.border}`:'none'}},
+        h('div',{style:{width:24,height:24,borderRadius:'50%',flexShrink:0,
+          background:C.cyanGlow,border:`1.5px solid rgba(0,207,255,0.4)`,
+          display:'flex',alignItems:'center',justifyContent:'center'}},
+          h(Check,{size:13,color:C.cyan,strokeWidth:2.5})),
+        h('div',{},
+          h('p',{style:{fontSize:14,fontWeight:600,color:C.white}},b.title),
+          h('p',{style:{fontSize:12,color:C.textMuted,marginTop:2}},b.sub))
+      ))
+    ),
+    // CTA
+    h('div',{style:{padding:'24px 20px 48px'}},
+      h('button',{style:{display:'block',width:'100%',marginTop:4,
+        background:CYAN_GRAD,borderRadius:28,padding:18,textAlign:'center',
+        fontSize:17,fontWeight:800,color:C.white,boxShadow:sCyan}},'Start Free 7-Day Trial'),
+      h('p',{style:{fontSize:12,color:C.textMuted,textAlign:'center',marginTop:14}},
+        'Cancel anytime · No commitment · Billed annually'),
+      h('button',{style:{display:'block',margin:'12px auto 0',
+        fontSize:12,color:C.textMuted}},'Restore Purchases')
+    )
+  );
+}
+
+// ── Notifications Screen ───────────────────────────────────────────────────
+function NotificationsScreen({onClose}){
+  const [accepted,setAccepted]=S(new Set());
+  const [toggles,setToggles]=S({fish:true,nearby:true,followers:false});
+  const reqs=[{id:1,name:'Taylor W.',avatar:81},{id:2,name:'Chris L.',avatar:82}];
+  const activity=[
+    {id:1,emoji:'❤️',bold:'Sarah M.',action:'liked your Half Dome adventure',time:'2m',seed:11,avatar:42},
+    {id:2,emoji:'💬',bold:'Jake R.',action:"commented: 'Insane! Did you use the cables?'",time:'15m',seed:22,avatar:53},
+    {id:3,emoji:'❤️',bold:'Mia C.',action:'liked your Lost Coast post',time:'1h',seed:33,avatar:64},
+    {id:4,emoji:'👥',bold:'Alex P.',action:'accepted your friend request',time:'3h',seed:null,avatar:75},
+  ];
+  const Toggle=({on,onToggle})=>h('div',{onClick:onToggle,style:{
+    width:48,height:28,borderRadius:14,
+    background:on?CYAN_GRAD:'rgba(255,255,255,0.12)',
+    position:'relative',cursor:'pointer',flexShrink:0,
+    transition:'background 0.2s ease',
+    boxShadow:on?sCyan:'none',
+  }},
+    h('div',{style:{position:'absolute',top:3,
+      left:on?22:3,width:22,height:22,borderRadius:'50%',
+      background:'white',transition:'left 0.2s ease',
+      boxShadow:'0 2px 6px rgba(0,0,0,0.25)'}})
+  );
+  return h('div',{style:{position:'absolute',inset:0,background:C.bg,zIndex:150}},
+    // Header
+    h('div',{style:{padding:'64px 20px 16px',display:'flex',alignItems:'center',
+      justifyContent:'space-between',borderBottom:`1px solid ${C.border}`}},
+      h('div',{},
+        h('h1',{style:{fontSize:28,fontWeight:900,color:C.white,fontFamily:FONT_H}},'Notifications'),
+        h('p',{style:{fontSize:12,color:C.textMuted,marginTop:3}},
+          'Stay updated, but only about what matters')
+      ),
+      h('button',{onClick:onClose,style:{width:34,height:34,borderRadius:'50%',
+        background:C.bgCard,display:'flex',alignItems:'center',justifyContent:'center'}},
+        h(X,{size:16,color:C.white}))
+    ),
+    h('div',{style:{overflowY:'auto',position:'absolute',top:138,bottom:0,left:0,right:0,paddingBottom:20}},
+      // Notification settings section
+      h('p',{style:{fontSize:11,fontWeight:700,color:C.textMuted,letterSpacing:'0.8px',
+        textTransform:'uppercase',padding:'18px 20px 10px'}},'Alert Settings'),
+      ...[
+        {key:'fish',icon:'🎣',title:'Activity alert',sub:'Get daily forecast & trail updates'},
+        {key:'nearby',icon:'👥',title:'Activity nearby',sub:'Be notified when friends post near you'},
+        {key:'followers',icon:'🔔',title:'Followers',sub:'New follower notifications'},
+      ].map(row=>h('div',{key:row.key,style:{display:'flex',alignItems:'center',gap:14,
+        padding:'14px 20px',borderBottom:`1px solid ${C.border}`}},
+        h('div',{style:{width:42,height:42,borderRadius:14,background:C.bgCard,
+          display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:18}},
+          row.icon),
+        h('div',{style:{flex:1}},
+          h('p',{style:{fontSize:14,fontWeight:600,color:C.white}},row.title),
+          h('p',{style:{fontSize:12,color:C.textMuted,marginTop:2}},row.sub)
+        ),
+        h(Toggle,{on:toggles[row.key],onToggle:()=>setToggles(t=>({...t,[row.key]:!t[row.key]}))})
+      )),
+      // Friend Requests
+      h('p',{style:{fontSize:11,fontWeight:700,color:C.textMuted,letterSpacing:'0.8px',
+        textTransform:'uppercase',padding:'18px 20px 10px'}},'Friend Requests'),
+      ...reqs.map(r=>h('div',{key:r.id,style:{display:'flex',alignItems:'center',
+        gap:12,padding:'12px 20px',borderBottom:`1px solid ${C.border}`}},
+        h('img',{src:pic(40,40,r.avatar),alt:'',style:{width:42,height:42,
+          borderRadius:'50%',objectFit:'cover',flexShrink:0,border:`1.5px solid ${C.border}`}}),
+        h('p',{style:{flex:1,fontSize:13,color:C.white}},
+          h('strong',{style:{color:C.white}},r.name),' wants to follow you'),
+        accepted.has(r.id)
+          ?h('span',{style:{fontSize:12,color:C.cyan,fontWeight:700}},'Following ✓')
+          :h('div',{style:{display:'flex',gap:8}},
+            h('button',{onClick:()=>setAccepted(s=>new Set([...s,r.id])),style:{
+              background:CYAN_GRAD,color:C.white,borderRadius:20,
+              padding:'7px 14px',fontSize:12,fontWeight:700,boxShadow:sCyan}},'Accept'),
+            h('button',{style:{background:C.bgCard,color:C.textSecondary,
+              borderRadius:20,padding:'7px 14px',fontSize:12,fontWeight:600}},'Decline')
+          )
+      )),
+      // Activity
+      h('p',{style:{fontSize:11,fontWeight:700,color:C.textMuted,letterSpacing:'0.8px',
+        textTransform:'uppercase',padding:'18px 20px 10px'}},'Activity'),
+      ...activity.map(a=>h('div',{key:a.id,style:{display:'flex',alignItems:'center',
+        gap:12,padding:'12px 20px',borderBottom:`1px solid ${C.border}`}},
+        h('img',{src:pic(40,40,a.avatar),alt:'',style:{width:42,height:42,
+          borderRadius:'50%',objectFit:'cover',flexShrink:0,border:`1.5px solid ${C.border}`}}),
+        h('p',{style:{flex:1,fontSize:13,color:C.textSecondary,lineHeight:1.4}},
+          h('span',{style:{marginRight:4}},a.emoji),
+          h('strong',{style:{color:C.white}},a.bold),' ',a.action,
+          h('span',{style:{color:C.textMuted}},' · '+a.time)
+        ),
+        a.seed&&h('img',{src:pic(40,40,a.seed),alt:'',
+          style:{width:40,height:40,borderRadius:10,objectFit:'cover',flexShrink:0,
+            border:`1.5px solid ${C.border}`}})
+      ))
+    ),
+    h(StatusBar,{})
+  );
+}
+
+// ── Home Screen ──────────────────────────────────────────────────────────────
+// Horizontal card rows
+function HomeRecentCards(){
+  return h('div',{style:{
+    display:'flex',gap:12,
+    paddingLeft:20,paddingRight:8,paddingBottom:4,
+    overflowX:'auto',scrollbarWidth:'none',
+  }},
+    ...MY_ADVENTURES.map(post=>h('div',{key:post.id,style:{
+      width:252,flexShrink:0,borderRadius:20,overflow:'hidden',
+      background:'rgba(28,28,40,0.92)',border:`1px solid rgba(255,255,255,0.07)`,
+      boxShadow:'0 4px 24px rgba(0,0,0,0.5)',
+    }},
+      h('div',{style:{position:'relative',height:152,overflow:'hidden'}},
+        h('img',{src:pic(252,152,post.photo),alt:post.title,style:{
+          width:'100%',height:'100%',objectFit:'cover',display:'block'}}),
+        h('div',{style:{position:'absolute',inset:0,
+          background:'linear-gradient(to bottom,transparent 35%,rgba(0,0,0,0.72) 100%)'}})
+      ),
+      h('div',{style:{padding:'12px 14px 14px'}},
+        h('p',{style:{fontSize:15,fontWeight:800,color:C.white,fontFamily:FONT_H,
+          letterSpacing:'-0.2px',lineHeight:1.2,marginBottom:5}},post.title),
+        h('div',{style:{display:'flex',alignItems:'center',gap:5}},
+          h('span',{style:{fontSize:11,color:C.textMuted,fontFamily:FONT_B}},'🥾 '+post.dist),
+          h('span',{style:{color:C.border,fontSize:11}},'·'),
+          h('span',{style:{fontSize:11,color:C.textMuted,fontFamily:FONT_B}},post.elev),
+          h('span',{style:{color:C.border,fontSize:11}},'·'),
+          h('span',{style:{fontSize:11,color:C.textMuted,fontFamily:FONT_B}},post.dur)
+        )
+      )
+    ))
+  );
+}
+
+function HomeUpcomingCards(){
+  return h('div',{style:{
+    display:'flex',gap:12,
+    paddingLeft:20,paddingRight:8,paddingBottom:4,
+    overflowX:'auto',scrollbarWidth:'none',
+  }},
+    ...PLAN_ADVENTURES.map(adv=>h('div',{key:adv.id,style:{
+      width:252,flexShrink:0,borderRadius:20,overflow:'hidden',
+      background:'rgba(28,28,40,0.92)',border:`1px solid rgba(255,255,255,0.07)`,
+      boxShadow:'0 4px 24px rgba(0,0,0,0.5)',
+    }},
+      h('div',{style:{position:'relative',height:136,overflow:'hidden'}},
+        h('img',{src:pic(252,136,adv.photo),alt:adv.name,style:{
+          width:'100%',height:'100%',objectFit:'cover',display:'block'}}),
+        h('div',{style:{position:'absolute',inset:0,
+          background:'linear-gradient(to bottom,transparent 35%,rgba(0,0,0,0.68) 100%)'}}),
+        h('div',{style:{position:'absolute',top:8,right:8,...glassStyle,borderRadius:20,padding:'4px 10px'}},
+          h('span',{style:{fontSize:10,fontWeight:700,color:C.white,fontFamily:FONT_B}},'👤 '+adv.going.length+' going')
+        )
+      ),
+      h('div',{style:{padding:'12px 14px 14px'}},
+        h('p',{style:{fontSize:15,fontWeight:800,color:C.white,fontFamily:FONT_H,letterSpacing:'-0.2px',marginBottom:2}},adv.name),
+        h('p',{style:{fontSize:12,color:C.cyan,fontWeight:600,fontFamily:FONT_B,marginBottom:6}},adv.trail),
+        h('div',{style:{display:'flex',alignItems:'center',gap:5}},
+          h(CalendarDays,{size:11,color:C.textMuted,strokeWidth:2}),
+          h('span',{style:{fontSize:11,color:C.textMuted,fontFamily:FONT_B}},adv.date+' · '+adv.time)
+        )
+      )
+    ))
+  );
+}
+
+function HomeFriendsCards({likedPosts,onLike}){
+  return h('div',{style:{
+    display:'flex',gap:12,
+    paddingLeft:20,paddingRight:8,paddingBottom:4,
+    overflowX:'auto',scrollbarWidth:'none',
+  }},
+    ...POSTS.map((post,i)=>{
+      const rel=POST_RELATIONS[i%POST_RELATIONS.length];
+      return h('div',{key:post.id,style:{
+        width:252,flexShrink:0,borderRadius:20,overflow:'hidden',
+        background:'rgba(28,28,40,0.92)',border:`1px solid rgba(255,255,255,0.07)`,
+        boxShadow:'0 4px 24px rgba(0,0,0,0.5)',
+      }},
+        h('div',{style:{position:'relative',height:152,overflow:'hidden'}},
+          h('img',{src:pic(252,152,post.photo),alt:post.title,style:{
+            width:'100%',height:'100%',objectFit:'cover',display:'block'}}),
+          h('div',{style:{position:'absolute',inset:0,
+            background:'linear-gradient(to bottom,transparent 35%,rgba(0,0,0,0.72) 100%)'}}),
+          h('div',{style:{position:'absolute',top:8,right:8,...glassStyle,borderRadius:20,padding:'4px 10px'}},
+            h('span',{style:{fontSize:10,fontWeight:700,color:C.white,fontFamily:FONT_H}},rel)
+          )
+        ),
+        h('div',{style:{padding:'12px 14px 14px'}},
+          h('div',{style:{display:'flex',alignItems:'center',gap:7,marginBottom:7}},
+            h('img',{src:pic(28,28,post.avatar),alt:'',style:{
+              width:28,height:28,borderRadius:'50%',objectFit:'cover',
+              border:'1.5px solid rgba(255,255,255,0.2)',flexShrink:0}}),
+            h('span',{style:{fontSize:13,fontWeight:700,color:C.white,fontFamily:FONT_H}},post.user),
+            h('div',{style:{width:13,height:13,borderRadius:'50%',background:'#1D9BF0',
+              display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}},
+              h(Check,{size:7,color:'#fff',strokeWidth:3}))
+          ),
+          h('p',{style:{fontSize:14,fontWeight:700,color:C.white,fontFamily:FONT_H,
+            letterSpacing:'-0.2px',lineHeight:1.2,marginBottom:4}},post.title),
+          h('div',{style:{display:'flex',alignItems:'center',gap:5}},
+            h('span',{style:{fontSize:11,color:C.textMuted,fontFamily:FONT_B}},'🥾 '+post.dist),
+            h('span',{style:{color:C.border,fontSize:11}},'·'),
+            h('span',{style:{fontSize:11,color:C.textMuted,fontFamily:FONT_B}},post.dur)
+          )
+        )
+      );
+    })
+  );
+}
+
+function HomeScreen({likedPosts,onLike}){
+  const [activeTab,setActiveTab]=S('recent');
+
+  // Inline stat card
+  const StatCard=({number,label,Icon})=>h('div',{style:{
+    flex:1,borderRadius:22,
+    background:'rgba(28,28,40,0.94)',
+    border:`1px solid rgba(255,255,255,0.07)`,
+    padding:'16px 16px 18px',
+    display:'flex',alignItems:'flex-end',justifyContent:'space-between',
+    boxShadow:'0 4px 24px rgba(0,0,0,0.4)',
+    overflow:'hidden',
+  }},
+    h('div',{},
+      h('div',{style:{fontSize:40,fontWeight:900,color:C.white,fontFamily:FONT_H,
+        lineHeight:1,letterSpacing:'-1.5px'}},number),
+      h('div',{style:{fontSize:12,color:C.textMuted,fontFamily:FONT_B,marginTop:6,fontWeight:500}},label)
+    ),
+    h('div',{style:{
+      width:44,height:44,borderRadius:14,
+      background:'rgba(0,207,255,0.10)',border:`1px solid rgba(0,207,255,0.18)`,
+      display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,
+    }},
+      h(Icon,{size:22,color:C.cyan,strokeWidth:1.8})
+    )
+  );
+
+  return h('div',{style:{position:'absolute',inset:0,background:C.bg}},
+
+    /* teal radial glow */
+    h('div',{style:{
+      position:'absolute',top:0,left:0,right:0,height:320,
+      background:'radial-gradient(ellipse 100% 55% at 50% 0%,rgba(0,180,220,0.20) 0%,transparent 70%)',
+      pointerEvents:'none',zIndex:0,
+    }}),
+    h(StatusBar,{}),
+
+    /* scrollable body */
+    h('div',{style:{
+      position:'absolute',top:54,left:0,right:0,bottom:76,
+      overflowY:'auto',zIndex:5,paddingBottom:16,
+    }},
+
+      /* ── HEADER ──────────────────────────────────────────────────── */
+      h('div',{style:{
+        padding:'18px 20px 20px',
+        display:'flex',alignItems:'center',gap:16,
+      }},
+        h('img',{src:pic(72,72,99),alt:'avatar',style:{
+          width:72,height:72,borderRadius:'50%',objectFit:'cover',flexShrink:0,
+          border:`2.5px solid ${C.cyan}`,
+          boxShadow:`0 0 0 3px rgba(0,207,255,0.12),0 4px 18px rgba(0,0,0,0.5)`,
+        }}),
+        h('div',{style:{flex:1,minWidth:0}},
+          h('p',{style:{fontSize:12,color:C.textMuted,fontFamily:FONT_B,marginBottom:3}},'Welcome back 👋'),
+          h('h1',{style:{
+            fontSize:30,fontWeight:900,color:C.white,fontFamily:FONT_H,
+            letterSpacing:'-0.6px',lineHeight:1.1,marginBottom:2,
+          }},'Hi, Jack!'),
+          h('p',{style:{fontSize:12,color:C.textMuted,fontFamily:FONT_B}},'@jackmcandrew')
+        )
+      ),
+
+      /* ── STAT CARDS ──────────────────────────────────────────────── */
+      h('div',{style:{display:'flex',gap:12,padding:'0 20px 22px'}},
+        h(StatCard,{number:'47',label:'Adventures',Icon:Mountain}),
+        h(StatCard,{number:'3',label:'Upcoming',Icon:CalendarDays})
+      ),
+
+      /* ── TAB FILTER ROW ──────────────────────────────────────────── */
+      h('div',{style:{
+        display:'flex',gap:10,
+        paddingLeft:20,paddingRight:8,paddingBottom:18,
+        overflowX:'auto',scrollbarWidth:'none',
+      }},
+        ...['recent','upcoming','friends'].map(t=>
+          h('button',{key:t,onClick:()=>setActiveTab(t),style:{
+            height:38,padding:'0 22px',borderRadius:19,flexShrink:0,
+            background:activeTab===t?C.cyan:'rgba(28,28,40,0.9)',
+            border:`1.5px solid ${activeTab===t?C.cyan:'rgba(255,255,255,0.10)'}`,
+            fontSize:14,fontWeight:700,fontFamily:FONT_H,
+            color:activeTab===t?'#061018':C.textMuted,
+            transition:'all 0.18s ease',
+          }},t.charAt(0).toUpperCase()+t.slice(1))
+        )
+      ),
+
+      /* ── CONTENT CARDS ───────────────────────────────────────────── */
+      activeTab==='recent'   &&h(HomeRecentCards,{}),
+      activeTab==='upcoming' &&h(HomeUpcomingCards,{}),
+      activeTab==='friends'  &&h(HomeFriendsCards,{likedPosts,onLike}),
+    )
+  );
+}
+
+// ── Bottom Nav — floating frosted glass pill, icons only ───────────────────
+const NAV=[
+  {key:'home',Icon:Home},
+  {key:'map',Icon:Map},
+  {key:'friends',Icon:Users},
+  {key:'plan',Icon:CalendarDays},
+  {key:'profile',Icon:User},
+];
+function BottomNav({active,onChange}){
+  return h('div',{style:{
+    position:'absolute',bottom:16,left:14,right:14,height:60,
+    ...glassStyle,
+    borderRadius:30,
+    display:'flex',alignItems:'center',justifyContent:'space-around',
+    zIndex:40,
+    boxShadow:'0 8px 40px rgba(0,0,0,0.45)',
+    padding:'0 4px',
+  }},
+    ...NAV.map(tab=>{
+      const on=active===tab.key;
+      return h('button',{key:tab.key,onClick:()=>onChange(tab.key),style:{
+        display:'flex',alignItems:'center',justifyContent:'center',
+        width:46,height:42,borderRadius:14,
+        background:on?'rgba(0,207,255,0.12)':'transparent',
+        transition:'all 0.2s ease',
+      }},
+        h(tab.Icon,{size:20,
+          color:on?C.cyan:'rgba(255,255,255,0.35)',
+          strokeWidth:on?2.2:1.8})
+      );
+    })
+  );
+}
+
+// ── App ────────────────────────────────────────────────────────────────────
+function App(){
+  const [tab,setTab]=S('home');
+  const [showCreate,setShowCreate]=S(false);
+  const [showPremium,setShowPremium]=S(false);
+  const [showNotif,setShowNotif]=S(false);
+  const [liked,setLiked]=S(new Set());
+
+  const onLike=CB(id=>{
+    setLiked(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
+  },[]);
+  const openCreate=CB(()=>setShowCreate(true),[]);
+  const openPremium=CB(()=>setShowPremium(true),[]);
+
+  // Bottom nav: 4 tabs only (no create)
+  const onTab=CB(t=>setTab(t),[]);
+
+  const showNav=!showCreate&&!showPremium&&!showNotif;
+
+  return h('div',{style:{
+    width:390,height:844,borderRadius:50,overflow:'hidden',
+    position:'relative',background:C.bg,
+    boxShadow:'0 50px 100px rgba(0,0,0,0.6),0 0 0 1px rgba(0,0,0,0.4),inset 0 0 0 1px rgba(255,255,255,0.06)',
+    flexShrink:0,
+  }},
+    // Home — default landing tab
+    tab==='home'&&h('div',{style:{position:'absolute',inset:0,zIndex:2}},
+      h(HomeScreen,{likedPosts:liked,onLike})
+    ),
+    // Map — always mounted (hidden via display:none when inactive)
+    h('div',{style:{position:'absolute',inset:0,display:tab==='map'?'block':'none',zIndex:1}},
+      h(MapScreen,{likedPosts:liked,onLike,isActive:tab==='map',onPremium:openPremium})
+    ),
+    // Other screens
+    tab==='friends'&&h('div',{style:{position:'absolute',inset:0,zIndex:2}},
+      h(FriendsScreen,{likedPosts:liked,onLike,
+        onNotifications:()=>setShowNotif(true),onOpenCreate:openCreate})
+    ),
+    tab==='plan'&&h('div',{style:{position:'absolute',inset:0,zIndex:2}},
+      h(PlanScreen,{})
+    ),
+    tab==='profile'&&h('div',{style:{position:'absolute',inset:0,zIndex:2}},
+      h(ProfileScreen,{onPremium:openPremium,onOpenCreate:openCreate})
+    ),
+    // Modals (slide up over everything)
+    showCreate&&h('div',{style:{position:'absolute',inset:0,zIndex:100,
+      animation:'slideUp 0.35s cubic-bezier(0.32,0.72,0,1)'}},
+      h(CreateScreen,{onClose:()=>setShowCreate(false)})
+    ),
+    showPremium&&h('div',{style:{position:'absolute',inset:0,zIndex:200,
+      animation:'slideUp 0.35s cubic-bezier(0.32,0.72,0,1)'}},
+      h(PremiumScreen,{onClose:()=>setShowPremium(false)})
+    ),
+    showNotif&&h('div',{style:{position:'absolute',inset:0,zIndex:150,
+      animation:'slideUp 0.35s cubic-bezier(0.32,0.72,0,1)'}},
+      h(NotificationsScreen,{onClose:()=>setShowNotif(false)})
+    ),
+    // Floating bottom nav (hidden when a modal is open)
+    showNav&&h(BottomNav,{active:tab,onChange:onTab}),
+    h('style',{},'@keyframes slideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}')
+  );
+}
+
+createRoot(document.getElementById('root')).render(h(React.StrictMode,{},h(App)));
+</script>
+</body>
+</html>

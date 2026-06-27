@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# API keys — never commit real keys
+config.js
+
+# Build output
+dist/
+.vite/
+
+# OS / editor
+.DS_Store
+.claude/
+*.local
